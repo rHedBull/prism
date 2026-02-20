@@ -115,14 +115,11 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                 for (const [id, m] of Object.entries(nodeMeshes)) {
                     if (family.has(id)) {
                         m.material.opacity = 1.0;
-                        m.material.transparent = true;
-                        // Glow descendants
                         if (descendants.has(id)) {
-                            m.material.emissive.setHex(0x222222);
+                            m.material.emissiveIntensity = 0.5;
                         }
                     } else {
-                        m.material.opacity = 0.12;
-                        m.material.transparent = true;
+                        m.material.opacity = 0.08;
                     }
                 }
 
@@ -137,17 +134,12 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                 }
             }
         } else if (hoveredMesh) {
-            hoveredMesh.material.emissive.setHex(0x000000);
+            hoveredMesh.material.emissiveIntensity = 0.15;
             hoveredMesh = null;
             infoPanel.style.display = 'none';
             resetEdgeHighlights(edgeMeshes);
             resetNodeOpacity(nodeMeshes);
             clearSpotlights();
-            // Reset emissive on all
-            for (const m of Object.values(nodeMeshes)) {
-                m.material.emissive.setHex(0x000000);
-                m.material.emissiveIntensity = 0.15;
-            }
         }
     });
 
@@ -195,9 +187,8 @@ function showInfoPanel(data) {
 }
 
 function resetNodeOpacity(nodeMeshes) {
-    for (const mesh of Object.values(nodeMeshes)) {
+    for (const [id, mesh] of Object.entries(nodeMeshes)) {
         mesh.material.opacity = 1.0;
-        mesh.material.emissive.setHex(0x000000);
         mesh.material.emissiveIntensity = 0.15;
     }
 }

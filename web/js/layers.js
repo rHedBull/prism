@@ -117,6 +117,8 @@ export function createLayers(layerGroups, edges, scene) {
                     emissive: color,
                     emissiveIntensity: 0.15,
                     shininess: 60,
+                    transparent: true,
+                    opacity: 1.0,
                 });
                 const mesh = new THREE.Mesh(geo, mat);
                 mesh.position.set(box.cx, y + height / 2 + 0.1, box.cz);
