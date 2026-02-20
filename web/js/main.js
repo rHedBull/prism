@@ -7,8 +7,8 @@ import { setupInteraction } from './interaction.js';
 
 const { scene, camera, renderer, controls } = createScene();
 
-const defaultCameraPos = new THREE.Vector3(30, 40, 30);
-const defaultTarget = new THREE.Vector3(0, 10, 0);
+const defaultCameraPos = new THREE.Vector3(45, 50, 45);
+const defaultTarget = new THREE.Vector3(0, 15, 0);
 
 camera.position.copy(defaultCameraPos);
 controls.target.copy(defaultTarget);

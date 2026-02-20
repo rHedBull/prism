@@ -77,3 +77,49 @@ export function computeForceLayout(nodes, edges, iterations = 200, bounds = 17) 
 
     return positions;
 }
+
+// Clustered grid layout: group nodes by parent file, arrange clusters in a grid
+export function computeClusteredLayout(nodes, bounds = 17) {
+    // Group by parent file
+    const clusters = {};
+    for (const node of nodes) {
+        const parent = node.parent || '_orphan';
+        if (!clusters[parent]) clusters[parent] = [];
+        clusters[parent].push(node);
+    }
+
+    const clusterKeys = Object.keys(clusters);
+    const clusterCount = clusterKeys.length;
+
+    // Arrange clusters in a grid
+    const gridCols = Math.ceil(Math.sqrt(clusterCount));
+    const gridRows = Math.ceil(clusterCount / gridCols);
+    const cellSize = (bounds * 2) / Math.max(gridCols, gridRows);
+    const padding = cellSize * 0.1;
+
+    const positions = {};
+
+    clusterKeys.forEach((key, idx) => {
+        const col = idx % gridCols;
+        const row = Math.floor(idx / gridCols);
+
+        // Center of this cluster's cell
+        const cx = (col - (gridCols - 1) / 2) * cellSize;
+        const cz = (row - (gridRows - 1) / 2) * cellSize;
+
+        const members = clusters[key];
+        const innerCols = Math.ceil(Math.sqrt(members.length));
+        const innerSpacing = (cellSize - padding * 2) / Math.max(innerCols, 1);
+
+        members.forEach((node, i) => {
+            const ic = i % innerCols;
+            const ir = Math.floor(i / innerCols);
+            positions[node.id] = {
+                x: cx + (ic - (innerCols - 1) / 2) * innerSpacing,
+                z: cz + (ir - (Math.ceil(members.length / innerCols) - 1) / 2) * innerSpacing,
+            };
+        });
+    });
+
+    return positions;
+}

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { computeForceLayout } from './layout.js';
+import { computeForceLayout, computeClusteredLayout } from './layout.js';
 
 const LAYER_COLORS = {
     0: 0x6688cc, // C4 Code — light blue
@@ -26,6 +26,7 @@ const LAYER_LABELS = {
 const LAYER_SPACING = 12;
 const LOC_SCALE = 0.08;
 export const LAYER_SIZE = 40;
+const MIN_LAYER_SIZE = 40;
 
 export function createLayers(layerGroups, edges, scene) {
     const layerMeshes = {};
@@ -38,8 +39,11 @@ export function createLayers(layerGroups, edges, scene) {
         const y = level * LAYER_SPACING;
         const nodes = layerGroups[level];
 
+        // Scale layer size based on node count so dense layers spread out
+        const layerSize = Math.max(MIN_LAYER_SIZE, Math.sqrt(nodes.length) * 6);
+
         // Layer plane — more visible
-        const planeGeo = new THREE.BoxGeometry(LAYER_SIZE, 0.15, LAYER_SIZE);
+        const planeGeo = new THREE.BoxGeometry(layerSize, 0.15, layerSize);
         const planeMat = new THREE.MeshPhongMaterial({
             color: LAYER_COLORS[level] || 0x666666,
             transparent: true,
@@ -53,7 +57,7 @@ export function createLayers(layerGroups, edges, scene) {
 
         // Glowing wireframe border around layer
         const borderGeo = new THREE.EdgesGeometry(
-            new THREE.BoxGeometry(LAYER_SIZE, 0.15, LAYER_SIZE)
+            new THREE.BoxGeometry(layerSize, 0.15, layerSize)
         );
         const borderMat = new THREE.LineBasicMaterial({
             color: LAYER_COLORS[level] || 0x666666,
@@ -70,11 +74,13 @@ export function createLayers(layerGroups, edges, scene) {
             LAYER_COLORS[level] || 0x666666,
             36
         );
-        label.position.set(-LAYER_SIZE / 2 - 4, y + 1.5, 0);
+        label.position.set(-layerSize / 2 - 4, y + 1.5, 0);
         scene.add(label);
 
-        // Force-directed layout within this layer
-        const positions = computeForceLayout(nodes, edges, 200, LAYER_SIZE / 2);
+        // Layout: clustered grid for C4 (Code), force-directed for others
+        const positions = level === 0
+            ? computeClusteredLayout(nodes, layerSize / 2)
+            : computeForceLayout(nodes, edges, 200, layerSize / 2);
 
         nodes.forEach((node) => {
             const pos = positions[node.id];
