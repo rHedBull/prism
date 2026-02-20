@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { highlightEdges, resetEdgeHighlights } from './edges.js';
+import { getLeftOffset, getCanvasWidth } from './scene.js';
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -99,11 +100,10 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         }
     }
 
-    const PANEL_WIDTH = 280;
-
     window.addEventListener('mousemove', (event) => {
-        const canvasWidth = window.innerWidth - PANEL_WIDTH;
-        mouse.x = ((event.clientX - PANEL_WIDTH) / canvasWidth) * 2 - 1;
+        const leftOffset = getLeftOffset();
+        const canvasWidth = getCanvasWidth();
+        mouse.x = ((event.clientX - leftOffset) / canvasWidth) * 2 - 1;
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
         raycaster.setFromCamera(mouse, camera);
@@ -175,7 +175,7 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
 
         // Check layer planes
         const layerPlanes = Object.values(layerMeshes);
-        const layerHits = raycaster.intersectObjects(layerPlanes);
+        const layerHits = raycaster.intersectObjects(layerPlanes, true);
 
         if (layerHits.length > 0) {
             const layer = layerHits[0].object;

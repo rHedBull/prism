@@ -50,11 +50,13 @@ export function createLayers(layerGroups, edges, scene) {
             opacity: 0.15,
             depthWrite: false,
         });
+        const layerGroup = new THREE.Group();
+        layerGroup.userData = { type: 'layer', level };
+
         const plane = new THREE.Mesh(planeGeo, planeMat);
         plane.position.y = y;
         plane.userData = { type: 'layer', level };
-        scene.add(plane);
-        layerMeshes[level] = plane;
+        layerGroup.add(plane);
 
         // Wireframe border
         const borderGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(LAYER_SIZE, 0.15, LAYER_SIZE));
@@ -65,7 +67,7 @@ export function createLayers(layerGroups, edges, scene) {
         });
         const border = new THREE.LineSegments(borderGeo, borderMat);
         border.position.y = y;
-        scene.add(border);
+        layerGroup.add(border);
 
         // Layer label
         const label = createTextSprite(
@@ -74,7 +76,10 @@ export function createLayers(layerGroups, edges, scene) {
             36
         );
         label.position.set(-LAYER_SIZE / 2 - 4, y + 1.5, 0);
-        scene.add(label);
+        layerGroup.add(label);
+
+        scene.add(layerGroup);
+        layerMeshes[level] = layerGroup;
 
         // Group nodes by their _layerParent
         const byParent = {};
