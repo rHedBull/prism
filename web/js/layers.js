@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { computeForceLayout } from './layout.js';
 
 const LAYER_COLORS = {
     0: 0x4466aa, // models — blue
@@ -56,15 +57,13 @@ export function createLayers(layerGroups, edges, scene) {
         label.position.set(-LAYER_SIZE / 2 - 3, y + 1, 0);
         scene.add(label);
 
-        // Node blocks — simple grid layout for now, force-directed in Task 9
-        const cols = Math.ceil(Math.sqrt(nodes.length));
-        const spacing = LAYER_SIZE / (cols + 1);
+        // Force-directed layout within this layer
+        const positions = computeForceLayout(nodes, edges);
 
         nodes.forEach((node, i) => {
-            const col = i % cols;
-            const row = Math.floor(i / cols);
-            const x = (col - cols / 2) * spacing + spacing / 2;
-            const z = (row - cols / 2) * spacing + spacing / 2;
+            const pos = positions[node.id];
+            const x = pos.x;
+            const z = pos.z;
             const height = Math.max(1, node.lines_of_code * LOC_SCALE);
 
             const geo = new THREE.BoxGeometry(BLOCK_BASE, height, BLOCK_BASE);
