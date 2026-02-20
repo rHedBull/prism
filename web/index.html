@@ -5,23 +5,24 @@
     <title>Code Architecture Graph</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { overflow: hidden; background: #0a0a0f; color: #e0e0e0; font-family: monospace; }
+        body { overflow: hidden; background: #f8f6fc; color: #353148; font-family: monospace; }
         canvas { display: block; }
         #info-panel {
             position: fixed;
             top: 16px;
             right: 16px;
-            background: rgba(20, 20, 30, 0.9);
-            border: 1px solid rgba(100, 100, 140, 0.3);
+            background: rgba(248, 246, 252, 0.95);
+            border: 1px solid #cccad2;
             border-radius: 8px;
             padding: 16px;
             min-width: 220px;
             display: none;
             font-size: 13px;
+            box-shadow: 0 2px 8px rgba(53,49,72,0.1);
         }
-        #info-panel h3 { margin-bottom: 8px; color: #8888cc; }
+        #info-panel h3 { margin-bottom: 8px; color: #8c60f3; }
         #info-panel .field { margin: 4px 0; }
-        #info-panel .label { color: #888; }
+        #info-panel .label { color: #8e8a9c; }
         #controls {
             position: fixed;
             bottom: 16px;
@@ -30,15 +31,16 @@
             gap: 8px;
         }
         #controls button {
-            background: rgba(20, 20, 30, 0.9);
-            border: 1px solid rgba(100, 100, 140, 0.3);
+            background: rgba(248, 246, 252, 0.95);
+            border: 1px solid #cccad2;
             border-radius: 4px;
-            color: #e0e0e0;
+            color: #353148;
             padding: 8px 16px;
             cursor: pointer;
             font-family: monospace;
+            box-shadow: 0 1px 4px rgba(53,49,72,0.08);
         }
-        #controls button:hover { background: rgba(40, 40, 60, 0.9); }
+        #controls button:hover { background: #e4e0ec; }
     </style>
 </head>
 <body>

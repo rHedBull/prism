@@ -4,8 +4,8 @@ import * as TWEEN from '@tweenjs/tween.js';
 
 export function createScene() {
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a0f);
-    scene.fog = new THREE.FogExp2(0x0a0a0f, 0.005);
+    scene.background = new THREE.Color(0xf8f6fc);
+    scene.fog = new THREE.FogExp2(0xf8f6fc, 0.004);
 
     const camera = new THREE.PerspectiveCamera(
         60, window.innerWidth / window.innerHeight, 0.1, 1000
@@ -25,17 +25,12 @@ export function createScene() {
     controls.maxDistance = 200;
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0x404060, 0.8);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
     directionalLight.position.set(20, 40, 20);
     scene.add(directionalLight);
-
-    // Subtle warm point light below for ambient warmth
-    const warmLight = new THREE.PointLight(0x553322, 0.6, 80);
-    warmLight.position.set(0, -5, 0);
-    scene.add(warmLight);
 
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;

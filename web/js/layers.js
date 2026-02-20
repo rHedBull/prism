@@ -1,18 +1,18 @@
 import * as THREE from 'three';
 
 const LAYER_COLORS = {
-    0: 0x6688cc, // C4 Code — light blue
-    1: 0x4466aa, // C3 Component — blue
-    2: 0x44aa66, // C2 Container — green
-    3: 0xaa44aa, // C1 Context — purple
+    0: 0x4A90D9, // C4 Code — blue
+    1: 0x8c60f3, // C3 Component — vivid purple
+    2: 0x2ECC71, // C2 Container — green
+    3: 0xE74C3C, // C1 Context — red
 };
 
 const LANGUAGE_COLORS = {
-    python: 0xE8A838,       // warm amber/gold
-    typescript: 0x00BCD4,    // cyan/teal
-    typescriptreact: 0x00BCD4,
-    javascript: 0x8BC34A,    // yellow-green
-    javascriptreact: 0x8BC34A,
+    python: 0x8c60f3,       // vivid purple
+    typescript: 0x6a3fd4,    // deep purple
+    typescriptreact: 0x6a3fd4,
+    javascript: 0xb89ef7,    // light purple
+    javascriptreact: 0xb89ef7,
 };
 
 const LAYER_LABELS = {
@@ -48,6 +48,7 @@ export function createLayers(layerGroups, edges, scene) {
             color: LAYER_COLORS[level] || 0x666666,
             transparent: true,
             opacity: 0.15,
+            depthWrite: false,
         });
         const plane = new THREE.Mesh(planeGeo, planeMat);
         plane.position.y = y;

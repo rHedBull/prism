@@ -100,7 +100,7 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                 }
 
                 hoveredMesh = mesh;
-                mesh.material.emissive.setHex(0x333333);
+                mesh.material.emissive.setHex(0x222222);
 
                 const data = nodeDataMap.get(mesh);
                 showInfoPanel(data);

@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 
 const EDGE_COLORS = {
-    imports: 0x4488cc,
-    calls: 0xE8A838,
-    inherits_from: 0x8844cc,
-    depends_on: 0x666666,
-    contains: 0x333344,
+    imports: 0x8c60f3,
+    calls: 0x353148,
+    inherits_from: 0x6a3fd4,
+    depends_on: 0x8e8a9c,
+    contains: 0xcccad2,
 };
 
 export function createEdges(edges, nodeMeshes, scene, allNodes) {
@@ -61,7 +61,7 @@ export function createEdges(edges, nodeMeshes, scene, allNodes) {
 
         const color = EDGE_COLORS[edge.type] || 0x444444;
         const isCallEdge = edge.type === 'calls';
-        const baseOpacity = isCallEdge ? 0.25 : 0.12;
+        const baseOpacity = isCallEdge ? 0.45 : 0.25;
 
         let line;
         if (isVertical && !isCallEdge) {
