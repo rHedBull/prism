@@ -4,11 +4,30 @@ import { highlightEdges, resetEdgeHighlights } from './edges.js';
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
+// Build id->mesh lookup for tree panel hover
+let _idToMesh = null;
+let _nodeDataMapRef = null;
+let _edgeMeshesRef = null;
+let _nodeMeshesRef = null;
+let _parentMapRef = null;
+
 export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMeshes, layerMeshes, controls, animateCameraFn, defaultCameraPos, defaultTarget, LAYER_SIZE, parentMap) {
     const infoPanel = document.getElementById('info-panel');
     let hoveredMesh = null;
     let focusedLayer = null;
     const spotlightLines = [];
+    let hoverFromTree = false;
+
+    _nodeDataMapRef = nodeDataMap;
+    _edgeMeshesRef = edgeMeshes;
+    _nodeMeshesRef = nodeMeshes;
+    _parentMapRef = parentMap;
+
+    // Build id -> mesh lookup
+    _idToMesh = {};
+    for (const [mesh, data] of nodeDataMap) {
+        _idToMesh[data.id] = mesh;
+    }
 
     // Build descendant map from _layerParent: parentId -> [childIds] (recursive)
     const childMap = {};
@@ -80,8 +99,11 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         }
     }
 
+    const PANEL_WIDTH = 280;
+
     window.addEventListener('mousemove', (event) => {
-        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        const canvasWidth = window.innerWidth - PANEL_WIDTH;
+        mouse.x = ((event.clientX - PANEL_WIDTH) / canvasWidth) * 2 - 1;
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
         raycaster.setFromCamera(mouse, camera);
@@ -102,9 +124,13 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                 hoveredMesh = mesh;
                 mesh.material.emissive.setHex(0x222222);
 
+                hoverFromTree = false;
                 const data = nodeDataMap.get(mesh);
                 showInfoPanel(data);
                 highlightEdges(edgeMeshes, data.id, parentMap);
+
+                // Sync tree panel selection
+                if (window._graphHoverCallback) window._graphHoverCallback(data.id);
 
                 // Highlight descendants and ancestors
                 const descendants = getDescendants(data.id);
@@ -133,13 +159,14 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                     drawSpotlight(mesh, childMeshes, color);
                 }
             }
-        } else if (hoveredMesh) {
+        } else if (hoveredMesh && !hoverFromTree) {
             hoveredMesh.material.emissiveIntensity = 0.15;
             hoveredMesh = null;
             infoPanel.style.display = 'none';
             resetEdgeHighlights(edgeMeshes);
             resetNodeOpacity(nodeMeshes);
             clearSpotlights();
+            if (window._graphHoverCallback) window._graphHoverCallback(null);
         }
     });
 
@@ -174,6 +201,59 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
             animateCameraFn(camera, controls, defaultCameraPos, defaultTarget);
         }
     });
+
+    // Tree panel hover: highlight a node by id (from panel hover)
+    window._treePanelHoverCallback = (nodeId) => {
+        const mesh = _idToMesh[nodeId];
+        if (!mesh) return;
+
+        // Reset previous
+        if (hoveredMesh) {
+            hoveredMesh.material.emissive.setHex(0x000000);
+            resetEdgeHighlights(edgeMeshes);
+            resetNodeOpacity(nodeMeshes);
+            clearSpotlights();
+        }
+
+        hoverFromTree = true;
+        hoveredMesh = mesh;
+        mesh.material.emissive.setHex(0x222222);
+
+        const data = nodeDataMap.get(mesh);
+        showInfoPanel(data);
+        highlightEdges(edgeMeshes, data.id, parentMap);
+
+        const descendants = getDescendants(data.id);
+        const ancestors = getAncestors(data.id);
+        const family = new Set([data.id, ...descendants, ...ancestors]);
+
+        for (const [id, m] of Object.entries(nodeMeshes)) {
+            if (family.has(id)) {
+                m.material.opacity = 1.0;
+                if (descendants.has(id)) m.material.emissiveIntensity = 0.5;
+            } else {
+                m.material.opacity = 0.08;
+            }
+        }
+
+        const directChildren = childMap[data.id] || [];
+        const childMeshes = directChildren.map(cid => nodeMeshes[cid]).filter(Boolean);
+        if (childMeshes.length > 0) {
+            drawSpotlight(mesh, childMeshes, mesh.material.color.getHex());
+        }
+    };
+
+    window._treePanelLeaveCallback = () => {
+        if (hoveredMesh && hoverFromTree) {
+            hoveredMesh.material.emissiveIntensity = 0.15;
+            hoveredMesh = null;
+            hoverFromTree = false;
+            infoPanel.style.display = 'none';
+            resetEdgeHighlights(edgeMeshes);
+            resetNodeOpacity(nodeMeshes);
+            clearSpotlights();
+        }
+    };
 }
 
 function showInfoPanel(data) {

@@ -3,19 +3,20 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import * as TWEEN from '@tweenjs/tween.js';
 
 export function createScene() {
+    const PANEL_WIDTH = 280;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf8f6fc);
     scene.fog = new THREE.FogExp2(0xf8f6fc, 0.004);
 
     const camera = new THREE.PerspectiveCamera(
-        60, window.innerWidth / window.innerHeight, 0.1, 1000
+        60, (window.innerWidth - PANEL_WIDTH) / window.innerHeight, 0.1, 1000
     );
     camera.position.set(30, 40, 30);
     camera.lookAt(0, 0, 0);
-
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(window.innerWidth - PANEL_WIDTH, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.domElement.style.marginLeft = `${PANEL_WIDTH}px`;
     document.body.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -33,9 +34,10 @@ export function createScene() {
     scene.add(directionalLight);
 
     window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
+        const w = window.innerWidth - PANEL_WIDTH;
+        camera.aspect = w / window.innerHeight;
         camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setSize(w, window.innerHeight);
     });
 
     return { scene, camera, renderer, controls };
