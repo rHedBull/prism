@@ -172,7 +172,27 @@ Update `graph-loader.js` to handle the new node types (`"interface"`, `"type_ali
 
 ---
 
-## 5. Files Changed
+## 5. Connection to Data Streams
+
+This feature is the foundation for the planned **Data Streams** feature (animated data lineage). The `role` classification defines where data streams start, flow through, and end:
+
+```
+data node (source)  →  control node  →  control node  →  ...  →  data node (sink)
+     UserSchema          create_user()     db.save()            UserResponse
+```
+
+- **Data nodes become sources and sinks.** A `UserSchema` (role=data) is where a stream originates. A `UserResponse` (role=data) is where it terminates.
+- **Control nodes become the plumbing.** Functions with role=control that import a data node and call other control nodes form the pipeline steps between source and sink.
+- **A data stream is a path: data → [control chain] → data.** Select a data node, follow edges into control nodes, follow their call chains, stop when you hit another data node. That's one complete stream.
+
+Without the role classification, there's no way to distinguish stream endpoints from pipeline steps — every node looks the same. The `role` field makes stream computation a graph traversal with clear start/stop conditions.
+
+**v1 (this feature):** classify nodes — you can *see* the data/control separation.
+**v2 (Data Streams):** use that classification to *compute* data→control→...→control→data paths and animate particles along them.
+
+---
+
+## 6. Files Changed
 
 | File | Change |
 |------|--------|
