@@ -4,9 +4,10 @@ import { highlightEdges, resetEdgeHighlights } from './edges.js';
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
-export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMeshes) {
+export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMeshes, layerMeshes, controls, animateCameraFn, defaultCameraPos, defaultTarget, LAYER_SIZE) {
     const infoPanel = document.getElementById('info-panel');
     let hoveredMesh = null;
+    let focusedLayer = null;
     const originalColors = new Map();
 
     window.addEventListener('mousemove', (event) => {
@@ -42,6 +43,40 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
             infoPanel.style.display = 'none';
             resetEdgeHighlights(edgeMeshes);
             resetNodeOpacity(nodeMeshes);
+        }
+    });
+
+    window.addEventListener('click', (event) => {
+        raycaster.setFromCamera(mouse, camera);
+
+        // Check layer planes
+        const layerPlanes = Object.values(layerMeshes);
+        const layerHits = raycaster.intersectObjects(layerPlanes);
+
+        if (layerHits.length > 0) {
+            const layer = layerHits[0].object;
+            const level = layer.userData.level;
+            const y = layer.position.y;
+
+            if (focusedLayer === level) {
+                // Unfocus — back to vertical view
+                focusedLayer = null;
+                animateCameraFn(camera, controls, defaultCameraPos, defaultTarget);
+            } else {
+                // Focus this layer — horizontal view
+                focusedLayer = level;
+                const targetPos = new THREE.Vector3(LAYER_SIZE * 0.7, y + 5, LAYER_SIZE * 0.7);
+                const targetLookAt = new THREE.Vector3(0, y, 0);
+                animateCameraFn(camera, controls, targetPos, targetLookAt);
+            }
+            return;
+        }
+    });
+
+    window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && focusedLayer !== null) {
+            focusedLayer = null;
+            animateCameraFn(camera, controls, defaultCameraPos, defaultTarget);
         }
     });
 }

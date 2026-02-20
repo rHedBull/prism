@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { createScene, animate, animateCamera } from './scene.js';
 import { loadGraph, groupByAbstractionLevel } from './graph-loader.js';
-import { createLayers } from './layers.js';
+import { createLayers, LAYER_SIZE } from './layers.js';
 import { createEdges } from './edges.js';
 import { setupInteraction } from './interaction.js';
 
@@ -23,7 +23,7 @@ async function init() {
         const layerGroups = groupByAbstractionLevel(graph.nodes);
         const { layerMeshes, nodeMeshes, nodeDataMap } = createLayers(layerGroups, graph.edges, scene);
         const edgeMeshes = createEdges(graph.edges, nodeMeshes, scene);
-        setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMeshes);
+        setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMeshes, layerMeshes, controls, animateCamera, defaultCameraPos, defaultTarget, LAYER_SIZE);
         console.log(`Loaded ${graph.nodes.length} nodes, ${graph.edges.length} edges`);
     } catch (err) {
         console.error('Failed to load graph:', err);
