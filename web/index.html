@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Code Architecture Graph</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #0a0a0f; color: #e0e0e0; font-family: monospace; }
+        canvas { display: block; }
+        #info-panel {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            background: rgba(20, 20, 30, 0.9);
+            border: 1px solid rgba(100, 100, 140, 0.3);
+            border-radius: 8px;
+            padding: 16px;
+            min-width: 220px;
+            display: none;
+            font-size: 13px;
+        }
+        #info-panel h3 { margin-bottom: 8px; color: #8888cc; }
+        #info-panel .field { margin: 4px 0; }
+        #info-panel .label { color: #888; }
+        #controls {
+            position: fixed;
+            bottom: 16px;
+            left: 16px;
+            display: flex;
+            gap: 8px;
+        }
+        #controls button {
+            background: rgba(20, 20, 30, 0.9);
+            border: 1px solid rgba(100, 100, 140, 0.3);
+            border-radius: 4px;
+            color: #e0e0e0;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: monospace;
+        }
+        #controls button:hover { background: rgba(40, 40, 60, 0.9); }
+    </style>
+</head>
+<body>
+    <div id="info-panel">
+        <h3 id="info-name"></h3>
+        <div class="field"><span class="label">Type: </span><span id="info-type"></span></div>
+        <div class="field"><span class="label">LOC: </span><span id="info-loc"></span></div>
+        <div class="field"><span class="label">Language: </span><span id="info-lang"></span></div>
+        <div class="field"><span class="label">Path: </span><span id="info-path"></span></div>
+    </div>
+    <div id="controls">
+        <button id="btn-reset">Reset View</button>
+    </div>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+            "@tweenjs/tween.js": "https://cdn.jsdelivr.net/npm/@tweenjs/tween.js@25/dist/tween.esm.js"
+        }
+    }
+    </script>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
