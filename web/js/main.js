@@ -1,16 +1,30 @@
 import * as THREE from 'three';
 import { createScene, animate, animateCamera } from './scene.js';
+import { loadGraph, groupByAbstractionLevel } from './graph-loader.js';
+import { createLayers } from './layers.js';
 
 const { scene, camera, renderer, controls } = createScene();
 
-// Default camera position for reset
 const defaultCameraPos = new THREE.Vector3(30, 40, 30);
-const defaultTarget = new THREE.Vector3(0, 0, 0);
+const defaultTarget = new THREE.Vector3(0, 10, 0);
+
+camera.position.copy(defaultCameraPos);
+controls.target.copy(defaultTarget);
 
 document.getElementById('btn-reset').addEventListener('click', () => {
     animateCamera(camera, controls, defaultCameraPos, defaultTarget);
 });
 
-animate(renderer, scene, camera, controls);
+async function init() {
+    try {
+        const graph = await loadGraph('..');
+        const layerGroups = groupByAbstractionLevel(graph.nodes);
+        const { layerMeshes, nodeMeshes, nodeDataMap } = createLayers(layerGroups, graph.edges, scene);
+        console.log(`Loaded ${graph.nodes.length} nodes, ${graph.edges.length} edges`);
+    } catch (err) {
+        console.error('Failed to load graph:', err);
+    }
+}
 
-console.log('Scene initialized');
+init();
+animate(renderer, scene, camera, controls);
