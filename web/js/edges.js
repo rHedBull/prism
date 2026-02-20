@@ -83,7 +83,7 @@ export function createEdges(edges, nodeMeshes, scene, allNodes) {
             line = new THREE.Line(geometry, material);
         }
 
-        line.userData = { type: 'edge', edgeData: edge, baseOpacity };
+        line.userData = { type: 'edge', edgeData: edge, baseOpacity, fromMesh, toMesh };
         scene.add(line);
         edgeMeshes.push(line);
     }

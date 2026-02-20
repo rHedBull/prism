@@ -29,6 +29,17 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
         section.appendChild(item);
     }
 
+    // Hide edges whose endpoints are hidden or whose type is unchecked
+    function updateEdgeVisibility() {
+        for (const line of edgeMeshes) {
+            const { edgeData, fromMesh, toMesh } = line.userData;
+            const typeCb = document.getElementById(`edge-${edgeData.type}`);
+            const typeVisible = typeCb ? typeCb.checked : true;
+            const endpointsVisible = fromMesh.visible && toMesh.visible;
+            line.visible = typeVisible && endpointsVisible;
+        }
+    }
+
     // Layer toggles
     for (const level of [0, 1, 2, 3]) {
         const checkbox = document.getElementById(`layer-${level}`);
@@ -40,6 +51,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
                 const nodeLevel = data.abstraction_level ?? data._level;
                 if (nodeLevel === level) mesh.visible = visible;
             }
+            updateEdgeVisibility();
         });
     }
 
@@ -52,6 +64,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
             for (const [mesh, data] of nodeDataMap) {
                 if (data.type === type) mesh.visible = visible;
             }
+            updateEdgeVisibility();
         });
     }
 
@@ -60,12 +73,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
         const checkbox = document.getElementById(`edge-${edgeType}`);
         if (!checkbox) continue;
         checkbox.addEventListener('change', () => {
-            const visible = checkbox.checked;
-            for (const line of edgeMeshes) {
-                if (line.userData.edgeData.type === edgeType) {
-                    line.visible = visible;
-                }
-            }
+            updateEdgeVisibility();
         });
     }
 
@@ -78,6 +86,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
             for (const [mesh, data] of nodeDataMap) {
                 if (data.language === lang) mesh.visible = visible;
             }
+            updateEdgeVisibility();
         });
     }
 }
