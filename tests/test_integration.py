@@ -32,11 +32,13 @@ def test_full_pipeline():
     assert "python" in languages
     assert any(l in languages for l in ("typescript", "typescriptreact"))
 
-    # Verify abstraction levels are assigned
-    levels = {n["abstraction_level"] for n in nodes if n["type"] == "file"}
-    assert 0 in levels  # models
-    assert 1 in levels  # services
-    assert 2 in levels  # api/components
+    # Verify abstraction levels follow C4-C1 scheme
+    file_levels = {n["abstraction_level"] for n in nodes if n["type"] == "file"}
+    func_levels = {n["abstraction_level"] for n in nodes if n["type"] == "function"}
+    assert 1 in file_levels  # C3 — models
+    assert 2 in file_levels  # C2 — services
+    assert 3 in file_levels  # C1 — api/components
+    assert func_levels == {0}  # C4 — all functions at code level
 
     # Verify some known import edges
     import_edges = [(e["from"], e["to"]) for e in edges if e["type"] == "imports"]

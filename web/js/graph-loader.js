@@ -1,4 +1,4 @@
-export async function loadGraph(basePath = '..') {
+export async function loadGraph(basePath = '.') {
     const [nodesRes, edgesRes] = await Promise.all([
         fetch(`${basePath}/.callgraph/nodes.json`),
         fetch(`${basePath}/.callgraph/edges.json`),
@@ -11,10 +11,16 @@ export async function loadGraph(basePath = '..') {
 export function groupByAbstractionLevel(nodes) {
     const layers = {};
     for (const node of nodes) {
-        if (node.type !== 'file') continue;
-        const level = node.abstraction_level ?? 1;
-        if (!layers[level]) layers[level] = [];
-        layers[level].push(node);
+        // C4 (level 0): functions and classes; C3-C1 (levels 1-3): files
+        if (node.type === 'function' || node.type === 'class') {
+            const level = 0;
+            if (!layers[level]) layers[level] = [];
+            layers[level].push(node);
+        } else if (node.type === 'file') {
+            const level = node.abstraction_level ?? 2;
+            if (!layers[level]) layers[level] = [];
+            layers[level].push(node);
+        }
     }
     return layers;
 }

@@ -41,14 +41,18 @@ def test_builds_imports_edges():
 def test_assigns_abstraction_level():
     graph = build_graph(TEST_PROJECT)
     file_nodes = {n["id"]: n for n in graph["nodes"] if n["type"] == "file"}
-    # models should be level 0
+    func_nodes = {n["id"]: n for n in graph["nodes"] if n["type"] == "function"}
+    # models should be C3 (level 1)
     model_node = file_nodes.get("file:backend/models/user.py")
     if model_node:
-        assert model_node["abstraction_level"] == 0
-    # services should be level 1
+        assert model_node["abstraction_level"] == 1
+    # services should be C2 (level 2)
     svc_node = file_nodes.get("file:backend/services/auth_service.py")
     if svc_node:
-        assert svc_node["abstraction_level"] == 1
+        assert svc_node["abstraction_level"] == 2
+    # functions should always be C4 (level 0)
+    for fn in func_nodes.values():
+        assert fn["abstraction_level"] == 0
 
 def test_nodes_have_language():
     graph = build_graph(TEST_PROJECT)

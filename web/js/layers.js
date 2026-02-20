@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { computeForceLayout } from './layout.js';
 
 const LAYER_COLORS = {
-    0: 0x4466aa, // models — blue
-    1: 0x44aa66, // services — green
-    2: 0xaa6644, // api/components — orange
-    3: 0xaa44aa, // entry points — purple
+    0: 0x6688cc, // C4 Code — light blue
+    1: 0x4466aa, // C3 Component — blue
+    2: 0x44aa66, // C2 Container — green
+    3: 0xaa44aa, // C1 Context — purple
 };
 
 const LANGUAGE_COLORS = {
@@ -17,10 +17,10 @@ const LANGUAGE_COLORS = {
 };
 
 const LAYER_LABELS = {
-    0: 'models / types',
-    1: 'services / hooks',
-    2: 'api / components',
-    3: 'entry points',
+    0: 'C4 — Code',
+    1: 'C3 — Component',
+    2: 'C2 — Container',
+    3: 'C1 — Context',
 };
 
 const LAYER_SPACING = 12;

@@ -4,9 +4,12 @@ from callgraph.parsers.python_parser import parse_python_file
 from callgraph.parsers.typescript_parser import parse_typescript_file
 
 ABSTRACTION_LEVELS = {
-    "models": 0, "types": 0, "schemas": 0,
-    "services": 1, "utils": 1, "hooks": 1, "lib": 1,
-    "api": 2, "routes": 2, "components": 2, "views": 2,
+    # C3 — Component: data models, types, schemas
+    "models": 1, "types": 1, "schemas": 1,
+    # C2 — Container: services, utilities, business logic
+    "services": 2, "utils": 2, "hooks": 2, "lib": 2,
+    # C1 — Context: API surface, views, entry points
+    "api": 3, "routes": 3, "components": 3, "views": 3,
     "main": 3, "app": 3, "index": 3,
 }
 
@@ -91,10 +94,10 @@ def build_graph(root: Path) -> dict:
             "weight": 1,
         })
 
-        # Function/class nodes
+        # Function/class nodes — always C4 (Code), level 0
         for sub_node in parse_result["nodes"]:
             sub_node["language"] = lang
-            sub_node["abstraction_level"] = abstraction
+            sub_node["abstraction_level"] = 0
             sub_node["parent"] = file_id
             nodes.append(sub_node)
             edges.append({
@@ -118,7 +121,7 @@ def _get_abstraction_level(path: str) -> int:
         stem = part.replace(".py", "").replace(".ts", "").replace(".tsx", "").replace(".js", "")
         if stem in ABSTRACTION_LEVELS:
             return ABSTRACTION_LEVELS[stem]
-    return 1  # default to middle
+    return 2  # default to C2 (Container)
 
 def _build_import_edges(parse_results: dict, files: list, edges: list):
     file_paths = {f["path"] for f in files}

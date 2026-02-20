@@ -19,7 +19,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
 
 async function init() {
     try {
-        const graph = await loadGraph('..');
+        const graph = await loadGraph('.');
         const layerGroups = groupByAbstractionLevel(graph.nodes);
         const { layerMeshes, nodeMeshes, nodeDataMap } = createLayers(layerGroups, graph.edges, scene);
         const edgeMeshes = createEdges(graph.edges, nodeMeshes, scene, graph.nodes);

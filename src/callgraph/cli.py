@@ -20,8 +20,17 @@ def cmd_build(args):
 
 
 def cmd_serve(args):
+    import shutil
     port = args.port
-    directory = str(Path(__file__).parent.parent.parent / "web")
+    web_dir = Path(__file__).parent.parent.parent / "web"
+    # Copy graph data into web dir so it's served alongside the frontend
+    callgraph_src = Path.cwd() / ".callgraph"
+    callgraph_dst = web_dir / ".callgraph"
+    if callgraph_src.exists():
+        if callgraph_dst.exists():
+            shutil.rmtree(callgraph_dst)
+        shutil.copytree(callgraph_src, callgraph_dst)
+    directory = str(web_dir)
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=directory)
     with http.server.HTTPServer(("", port), handler) as httpd:
         print(f"Serving at http://localhost:{port}")
