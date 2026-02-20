@@ -75,6 +75,20 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
                         value_node = sub.child_by_field_name("value")
                         if name_node and value_node and value_node.type == "arrow_function":
                             _add_function_node(name_node, child, file_path, source, result)
+            if child.type in ("interface_declaration", "type_alias_declaration", "class_declaration"):
+                name_node = child.child_by_field_name("name")
+                if name_node:
+                    name = source[name_node.start_byte:name_node.end_byte].decode()
+                    loc = child.end_point[0] - child.start_point[0] + 1
+                    result.append({
+                        "id": f"class:{file_path}:{name}",
+                        "type": "class",
+                        "name": name,
+                        "file_path": file_path,
+                        "lines_of_code": loc,
+                        "start_line": child.start_point[0] + 1,
+                        "end_line": child.end_point[0] + 1,
+                    })
 
     # Interfaces and type aliases
     if node.type in ("interface_declaration", "type_alias_declaration"):
@@ -110,7 +124,7 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
 
     for child in node.children:
         # Don't recurse into function bodies for top-level extraction
-        if node.type not in ("function_declaration", "arrow_function", "method_definition"):
+        if node.type not in ("function_declaration", "arrow_function", "method_definition", "export_statement"):
             _extract_nodes(child, file_path, source, result)
 
 def _add_function_node(name_node, scope_node, file_path, source, result):
