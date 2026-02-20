@@ -11,7 +11,7 @@ const EDGE_COLORS = {
 export function createEdges(edges, nodeMeshes, scene, allNodes) {
     const edgeMeshes = [];
 
-    // Build parent lookup: node ID -> parent ID (for resolving func -> file)
+    // Build parent lookup: node ID -> parent ID
     const parentMap = {};
     if (allNodes) {
         for (const node of allNodes) {
@@ -21,14 +21,25 @@ export function createEdges(edges, nodeMeshes, scene, allNodes) {
         }
     }
 
+    // Resolve a node ID to the nearest rendered mesh by walking up the parent chain
+    function resolveMesh(nodeId) {
+        let id = nodeId;
+        const visited = new Set();
+        while (id && !visited.has(id)) {
+            if (nodeMeshes[id]) return nodeMeshes[id];
+            visited.add(id);
+            id = parentMap[id];
+        }
+        return null;
+    }
+
     for (const edge of edges) {
         if (edge.type === 'contains') continue;
 
-        // Resolve mesh: direct lookup, or fall back to parent file node
-        const fromMesh = nodeMeshes[edge.from] || nodeMeshes[parentMap[edge.from]];
-        const toMesh = nodeMeshes[edge.to] || nodeMeshes[parentMap[edge.to]];
+        const fromMesh = resolveMesh(edge.from);
+        const toMesh = resolveMesh(edge.to);
         if (!fromMesh || !toMesh) continue;
-        if (fromMesh === toMesh) continue; // skip same-file internal calls visually
+        if (fromMesh === toMesh) continue;
 
         const start = fromMesh.position.clone();
         const end = toMesh.position.clone();
@@ -81,12 +92,21 @@ export function createEdges(edges, nodeMeshes, scene, allNodes) {
 }
 
 export function highlightEdges(edgeMeshes, nodeId, parentMap) {
+    // Check if a node ID matches directly or via parent chain
+    function matches(edgeNodeId, targetId) {
+        let id = edgeNodeId;
+        const visited = new Set();
+        while (id && !visited.has(id)) {
+            if (id === targetId) return true;
+            visited.add(id);
+            id = parentMap[id];
+        }
+        return false;
+    }
+
     for (const line of edgeMeshes) {
         const edge = line.userData.edgeData;
-        // Match direct node ID or parent file ID for call edges
-        const fromMatch = edge.from === nodeId || (parentMap && parentMap[edge.from] === nodeId);
-        const toMatch = edge.to === nodeId || (parentMap && parentMap[edge.to] === nodeId);
-        if (fromMatch || toMatch) {
+        if (matches(edge.from, nodeId) || matches(edge.to, nodeId)) {
             line.material.opacity = 0.9;
         } else {
             line.material.opacity = 0.03;

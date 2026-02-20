@@ -87,12 +87,21 @@ export function createLayers(layerGroups, edges, scene) {
             const x = pos.x;
             const z = pos.z;
 
-            // Height: log-scaled LOC so large files don't tower absurdly
+            // Height: log-scaled LOC
             const height = Math.max(0.8, Math.log2(Math.max(1, node.lines_of_code)) * LOC_SCALE * 8);
 
-            // Base size: scale by export count — important files are wider
+            // Base size scales with abstraction level
             const exportCount = node.export_count || 1;
-            const baseSize = Math.min(3.0, 1.0 + exportCount * 0.25);
+            let baseSize;
+            if (level === 0) {
+                baseSize = Math.min(2.0, 0.8 + exportCount * 0.15);
+            } else if (level === 1) {
+                baseSize = Math.min(5.0, 1.5 + exportCount * 0.2);
+            } else if (level === 2) {
+                baseSize = Math.min(8.0, 3.0 + Math.log2(exportCount + 1) * 1.5);
+            } else {
+                baseSize = Math.min(12.0, 5.0 + Math.log2(exportCount + 1) * 2);
+            }
 
             const geo = new THREE.BoxGeometry(baseSize, height, baseSize);
             const color = LANGUAGE_COLORS[node.language] || 0x888888;
