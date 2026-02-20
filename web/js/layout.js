@@ -1,11 +1,11 @@
-// Simple force-directed layout for nodes within a layer
-export function computeForceLayout(nodes, edges, iterations = 200) {
+// Force-directed layout for nodes within a layer, with boundary clamping
+export function computeForceLayout(nodes, edges, iterations = 200, bounds = 17) {
     const nodeIds = new Set(nodes.map(n => n.id));
     const relevantEdges = edges.filter(e => nodeIds.has(e.from) && nodeIds.has(e.to));
 
     // Initialize positions randomly in a bounded area
     const positions = {};
-    const AREA = 30;
+    const AREA = bounds * 1.2;
     for (const node of nodes) {
         positions[node.id] = {
             x: (Math.random() - 0.5) * AREA,
@@ -15,10 +15,10 @@ export function computeForceLayout(nodes, edges, iterations = 200) {
         };
     }
 
-    const REPULSION = 80;
-    const ATTRACTION = 0.02;
+    const REPULSION = 50;
+    const ATTRACTION = 0.03;
     const DAMPING = 0.9;
-    const CENTER_PULL = 0.01;
+    const CENTER_PULL = 0.05;
 
     for (let iter = 0; iter < iterations; iter++) {
         // Repulsion between all pairs
@@ -66,6 +66,12 @@ export function computeForceLayout(nodes, edges, iterations = 200) {
             p.vz *= DAMPING;
             p.x += p.vx;
             p.z += p.vz;
+
+            // Clamp within bounds
+            const margin = 2;
+            const limit = bounds - margin;
+            p.x = Math.max(-limit, Math.min(limit, p.x));
+            p.z = Math.max(-limit, Math.min(limit, p.z));
         }
     }
 

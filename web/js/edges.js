@@ -26,10 +26,10 @@ export function createEdges(edges, nodeMeshes, scene) {
         const isVertical = Math.abs(start.y - end.y) > 2;
 
         if (isVertical) {
-            mid.x += (Math.random() - 0.5) * 4;
-            mid.z += (Math.random() - 0.5) * 4;
+            mid.x += (Math.random() - 0.5) * 3;
+            mid.z += (Math.random() - 0.5) * 3;
         } else {
-            mid.y += 3;
+            mid.y += 2.5;
         }
 
         const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
@@ -37,13 +37,28 @@ export function createEdges(edges, nodeMeshes, scene) {
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
         const color = EDGE_COLORS[edge.type] || 0x444444;
-        const material = new THREE.LineBasicMaterial({
-            color,
-            transparent: true,
-            opacity: 0.4,
-        });
 
-        const line = new THREE.Line(geometry, material);
+        let line;
+        if (isVertical) {
+            // Dashed lines for cross-layer edges
+            const material = new THREE.LineDashedMaterial({
+                color,
+                transparent: true,
+                opacity: 0.15,
+                dashSize: 0.8,
+                gapSize: 0.4,
+            });
+            line = new THREE.Line(geometry, material);
+            line.computeLineDistances();
+        } else {
+            const material = new THREE.LineBasicMaterial({
+                color,
+                transparent: true,
+                opacity: 0.15,
+            });
+            line = new THREE.Line(geometry, material);
+        }
+
         line.userData = { type: 'edge', edgeData: edge };
         scene.add(line);
         edgeMeshes.push(line);
@@ -56,17 +71,15 @@ export function highlightEdges(edgeMeshes, nodeId) {
     for (const line of edgeMeshes) {
         const edge = line.userData.edgeData;
         if (edge.from === nodeId || edge.to === nodeId) {
-            line.material.opacity = 1.0;
-            line.material.linewidth = 2;
+            line.material.opacity = 0.9;
         } else {
-            line.material.opacity = 0.08;
+            line.material.opacity = 0.03;
         }
     }
 }
 
 export function resetEdgeHighlights(edgeMeshes) {
     for (const line of edgeMeshes) {
-        line.material.opacity = 0.4;
-        line.material.linewidth = 1;
+        line.material.opacity = 0.15;
     }
 }

@@ -9,11 +9,11 @@ const LAYER_COLORS = {
 };
 
 const LANGUAGE_COLORS = {
-    python: 0x3572A5,
-    typescript: 0x3178C6,
-    typescriptreact: 0x3178C6,
-    javascript: 0xF7DF1E,
-    javascriptreact: 0xF7DF1E,
+    python: 0xE8A838,       // warm amber/gold
+    typescript: 0x00BCD4,    // cyan/teal
+    typescriptreact: 0x00BCD4,
+    javascript: 0x8BC34A,    // yellow-green
+    javascriptreact: 0x8BC34A,
 };
 
 const LAYER_LABELS = {
@@ -24,8 +24,7 @@ const LAYER_LABELS = {
 };
 
 const LAYER_SPACING = 12;
-const BLOCK_BASE = 1.5;
-const LOC_SCALE = 0.06;
+const LOC_SCALE = 0.08;
 export const LAYER_SIZE = 40;
 
 export function createLayers(layerGroups, edges, scene) {
@@ -39,12 +38,12 @@ export function createLayers(layerGroups, edges, scene) {
         const y = level * LAYER_SPACING;
         const nodes = layerGroups[level];
 
-        // Layer plane
-        const planeGeo = new THREE.BoxGeometry(LAYER_SIZE, 0.2, LAYER_SIZE);
+        // Layer plane — more visible
+        const planeGeo = new THREE.BoxGeometry(LAYER_SIZE, 0.15, LAYER_SIZE);
         const planeMat = new THREE.MeshPhongMaterial({
             color: LAYER_COLORS[level] || 0x666666,
             transparent: true,
-            opacity: 0.15,
+            opacity: 0.25,
         });
         const plane = new THREE.Mesh(planeGeo, planeMat);
         plane.position.y = y;
@@ -52,23 +51,51 @@ export function createLayers(layerGroups, edges, scene) {
         scene.add(plane);
         layerMeshes[level] = plane;
 
-        // Layer label
-        const label = createTextSprite(LAYER_LABELS[level] || `level ${level}`, LAYER_COLORS[level] || 0x666666);
-        label.position.set(-LAYER_SIZE / 2 - 3, y + 1, 0);
+        // Glowing wireframe border around layer
+        const borderGeo = new THREE.EdgesGeometry(
+            new THREE.BoxGeometry(LAYER_SIZE, 0.15, LAYER_SIZE)
+        );
+        const borderMat = new THREE.LineBasicMaterial({
+            color: LAYER_COLORS[level] || 0x666666,
+            transparent: true,
+            opacity: 0.6,
+        });
+        const border = new THREE.LineSegments(borderGeo, borderMat);
+        border.position.y = y;
+        scene.add(border);
+
+        // Layer label — larger, brighter
+        const label = createTextSprite(
+            LAYER_LABELS[level] || `level ${level}`,
+            LAYER_COLORS[level] || 0x666666,
+            36
+        );
+        label.position.set(-LAYER_SIZE / 2 - 4, y + 1.5, 0);
         scene.add(label);
 
         // Force-directed layout within this layer
-        const positions = computeForceLayout(nodes, edges);
+        const positions = computeForceLayout(nodes, edges, 200, LAYER_SIZE / 2);
 
-        nodes.forEach((node, i) => {
+        nodes.forEach((node) => {
             const pos = positions[node.id];
             const x = pos.x;
             const z = pos.z;
-            const height = Math.max(1, node.lines_of_code * LOC_SCALE);
 
-            const geo = new THREE.BoxGeometry(BLOCK_BASE, height, BLOCK_BASE);
+            // Height: log-scaled LOC so large files don't tower absurdly
+            const height = Math.max(0.8, Math.log2(Math.max(1, node.lines_of_code)) * LOC_SCALE * 8);
+
+            // Base size: scale by export count — important files are wider
+            const exportCount = node.export_count || 1;
+            const baseSize = Math.min(3.0, 1.0 + exportCount * 0.25);
+
+            const geo = new THREE.BoxGeometry(baseSize, height, baseSize);
             const color = LANGUAGE_COLORS[node.language] || 0x888888;
-            const mat = new THREE.MeshPhongMaterial({ color });
+            const mat = new THREE.MeshPhongMaterial({
+                color,
+                emissive: color,
+                emissiveIntensity: 0.15,
+                shininess: 60,
+            });
             const mesh = new THREE.Mesh(geo, mat);
             mesh.position.set(x, y + height / 2 + 0.1, z);
             mesh.userData = { type: 'node', nodeData: node };
@@ -82,18 +109,18 @@ export function createLayers(layerGroups, edges, scene) {
     return { layerMeshes, nodeMeshes, nodeDataMap };
 }
 
-function createTextSprite(text, color = 0xffffff) {
+function createTextSprite(text, color = 0xffffff, fontSize = 28) {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 64;
     const ctx = canvas.getContext('2d');
-    ctx.font = '28px monospace';
+    ctx.font = `bold ${fontSize}px monospace`;
     ctx.fillStyle = `#${new THREE.Color(color).getHexString()}`;
-    ctx.fillText(text, 10, 40);
+    ctx.fillText(text, 10, 44);
 
     const texture = new THREE.CanvasTexture(canvas);
     const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(16, 2, 1);
+    sprite.scale.set(18, 2.5, 1);
     return sprite;
 }
