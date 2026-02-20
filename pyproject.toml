@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "callgraph"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "tree-sitter>=0.23",
+    "tree-sitter-python>=0.23",
+    "tree-sitter-typescript>=0.23",
+    "tree-sitter-javascript>=0.23",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov"]
+
+[project.scripts]
+callgraph = "callgraph.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
