@@ -59,7 +59,7 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
                 name_node = child.child_by_field_name("name")
                 value_node = child.child_by_field_name("value")
                 if name_node and value_node and value_node.type == "arrow_function":
-                    _add_function_node(name_node, node, file_path, source, result)
+                    _add_function_node(name_node, node, file_path, source, result, body_node=value_node)
 
     # Export default function: export default function App() {}
     if node.type == "export_statement":
@@ -74,7 +74,7 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
                         name_node = sub.child_by_field_name("name")
                         value_node = sub.child_by_field_name("value")
                         if name_node and value_node and value_node.type == "arrow_function":
-                            _add_function_node(name_node, child, file_path, source, result)
+                            _add_function_node(name_node, child, file_path, source, result, body_node=value_node)
             if child.type in ("interface_declaration", "type_alias_declaration", "class_declaration"):
                 name_node = child.child_by_field_name("name")
                 if name_node:
@@ -127,9 +127,18 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
         if node.type not in ("function_declaration", "arrow_function", "method_definition", "export_statement"):
             _extract_nodes(child, file_path, source, result)
 
-def _add_function_node(name_node, scope_node, file_path, source, result):
+def _add_function_node(name_node, scope_node, file_path, source, result, body_node=None):
     name = source[name_node.start_byte:name_node.end_byte].decode()
     loc = scope_node.end_point[0] - scope_node.start_point[0] + 1
+
+    # Extract calls from function body
+    calls = []
+    if body_node is None:
+        # For function_declaration, body is a direct child field
+        body_node = scope_node.child_by_field_name("body")
+    if body_node:
+        _extract_calls(body_node, source, calls)
+
     result.append({
         "id": f"func:{file_path}:{name}",
         "type": "function",
@@ -138,7 +147,26 @@ def _add_function_node(name_node, scope_node, file_path, source, result):
         "lines_of_code": loc,
         "start_line": scope_node.start_point[0] + 1,
         "end_line": scope_node.end_point[0] + 1,
+        "calls": calls,
     })
+
+def _extract_calls(node, source: bytes, result: list):
+    """Extract function call names from an AST subtree."""
+    if node.type == "call_expression":
+        func_node = node.child_by_field_name("function")
+        if func_node:
+            # Simple name: foo()
+            if func_node.type == "identifier":
+                name = source[func_node.start_byte:func_node.end_byte].decode()
+                result.append(name)
+            # Member expression: obj.method() — grab the method name
+            elif func_node.type == "member_expression":
+                prop = func_node.child_by_field_name("property")
+                if prop:
+                    result.append(source[prop.start_byte:prop.end_byte].decode())
+
+    for child in node.children:
+        _extract_calls(child, source, result)
 
 def _extract_imports(node, source: bytes, result: list):
     if node.type == "import_statement":

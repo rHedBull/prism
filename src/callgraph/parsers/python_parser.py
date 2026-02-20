@@ -45,6 +45,11 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
         if name_node:
             name = source[name_node.start_byte:name_node.end_byte].decode()
             loc = node.end_point[0] - node.start_point[0] + 1
+            # Extract calls from function body
+            body = node.child_by_field_name("body")
+            calls = []
+            if body:
+                _extract_calls(body, source, calls)
             result.append({
                 "id": f"func:{file_path}:{name}",
                 "type": "function",
@@ -53,10 +58,35 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
                 "lines_of_code": loc,
                 "start_line": node.start_point[0] + 1,
                 "end_line": node.end_point[0] + 1,
+                "calls": calls,
             })
 
     for child in node.children:
         _extract_nodes(child, file_path, source, result)
+
+def _extract_calls(node, source: bytes, result: list):
+    """Extract simple function call names from an AST subtree."""
+    if node.type == "call":
+        func_node = node.child_by_field_name("function")
+        if func_node:
+            # Simple name: foo()
+            if func_node.type == "identifier":
+                name = source[func_node.start_byte:func_node.end_byte].decode()
+                result.append(name)
+            # Attribute access: but only grab the attribute name for dotted calls
+            # like module.func() — skip self.x() and obj.method()
+            elif func_node.type == "attribute":
+                attr = func_node.child_by_field_name("attribute")
+                obj = func_node.child_by_field_name("object")
+                if attr and obj:
+                    obj_name = source[obj.start_byte:obj.end_byte].decode()
+                    attr_name = source[attr.start_byte:attr.end_byte].decode()
+                    # Skip self/cls method calls
+                    if obj_name not in ("self", "cls"):
+                        result.append(attr_name)
+
+    for child in node.children:
+        _extract_calls(child, source, result)
 
 def _extract_imports(node, source: bytes, result: list):
     if node.type == "import_from_statement":

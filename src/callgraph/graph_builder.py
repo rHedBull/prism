@@ -107,6 +107,9 @@ def build_graph(root: Path) -> dict:
     # Build import edges (file-level)
     _build_import_edges(file_parse_results, files, edges)
 
+    # Build call edges (function-level)
+    _build_call_edges(file_parse_results, files, edges)
+
     return {"nodes": nodes, "edges": edges}
 
 def _get_abstraction_level(path: str) -> int:
@@ -169,3 +172,60 @@ def _resolve_import(module: str, source_path: str, file_paths: set) -> str | Non
         if c in file_paths:
             return c
     return None
+
+def _build_call_edges(parse_results: dict, files: list, edges: list):
+    file_paths = {f["path"] for f in files}
+
+    # Build per-file symbol tables: name -> func node ID
+    file_symbols = {}
+    for file_path, result in parse_results.items():
+        symbols = {}
+        for node in result["nodes"]:
+            if node["type"] == "function":
+                symbols[node["name"]] = node["id"]
+        file_symbols[file_path] = symbols
+
+    # Build per-file import maps: imported_name -> (source_file, original_name)
+    file_import_map = {}
+    for file_path, result in parse_results.items():
+        import_map = {}
+        for imp in result["imports"]:
+            target_file = _resolve_import(imp["module"], file_path, file_paths)
+            if target_file:
+                for name in imp.get("names", []):
+                    import_map[name] = target_file
+        file_import_map[file_path] = import_map
+
+    # Emit call edges
+    seen_call_edges = set()
+    for file_path, result in parse_results.items():
+        local_symbols = file_symbols.get(file_path, {})
+        import_map = file_import_map.get(file_path, {})
+
+        for node in result["nodes"]:
+            if node["type"] != "function" or "calls" not in node:
+                continue
+
+            caller_id = node["id"]
+            for call_name in node["calls"]:
+                target_id = None
+
+                # 1. Check same-file functions
+                if call_name in local_symbols and local_symbols[call_name] != caller_id:
+                    target_id = local_symbols[call_name]
+
+                # 2. Check imported functions
+                elif call_name in import_map:
+                    target_file = import_map[call_name]
+                    target_symbols = file_symbols.get(target_file, {})
+                    if call_name in target_symbols:
+                        target_id = target_symbols[call_name]
+
+                if target_id and (caller_id, target_id) not in seen_call_edges:
+                    seen_call_edges.add((caller_id, target_id))
+                    edges.append({
+                        "from": caller_id,
+                        "to": target_id,
+                        "type": "calls",
+                        "weight": 1,
+                    })

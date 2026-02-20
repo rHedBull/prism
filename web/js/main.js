@@ -22,8 +22,15 @@ async function init() {
         const graph = await loadGraph('..');
         const layerGroups = groupByAbstractionLevel(graph.nodes);
         const { layerMeshes, nodeMeshes, nodeDataMap } = createLayers(layerGroups, graph.edges, scene);
-        const edgeMeshes = createEdges(graph.edges, nodeMeshes, scene);
-        setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMeshes, layerMeshes, controls, animateCamera, defaultCameraPos, defaultTarget, LAYER_SIZE);
+        const edgeMeshes = createEdges(graph.edges, nodeMeshes, scene, graph.nodes);
+
+        // Build parent map for call edge hover resolution
+        const parentMap = {};
+        for (const node of graph.nodes) {
+            if (node.parent) parentMap[node.id] = node.parent;
+        }
+
+        setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMeshes, layerMeshes, controls, animateCamera, defaultCameraPos, defaultTarget, LAYER_SIZE, parentMap);
         console.log(`Loaded ${graph.nodes.length} nodes, ${graph.edges.length} edges`);
     } catch (err) {
         console.error('Failed to load graph:', err);

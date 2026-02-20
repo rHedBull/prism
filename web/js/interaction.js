@@ -4,7 +4,7 @@ import { highlightEdges, resetEdgeHighlights } from './edges.js';
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
-export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMeshes, layerMeshes, controls, animateCameraFn, defaultCameraPos, defaultTarget, LAYER_SIZE) {
+export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMeshes, layerMeshes, controls, animateCameraFn, defaultCameraPos, defaultTarget, LAYER_SIZE, parentMap) {
     const infoPanel = document.getElementById('info-panel');
     let hoveredMesh = null;
     let focusedLayer = null;
@@ -34,8 +34,8 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
 
                 const data = nodeDataMap.get(mesh);
                 showInfoPanel(data);
-                highlightEdges(edgeMeshes, data.id);
-                fadeUnconnectedNodes(nodeMeshes, edgeMeshes, data.id);
+                highlightEdges(edgeMeshes, data.id, parentMap);
+                fadeUnconnectedNodes(nodeMeshes, edgeMeshes, data.id, parentMap);
             }
         } else if (hoveredMesh) {
             hoveredMesh.material.emissive.setHex(0x000000);
@@ -91,12 +91,21 @@ function showInfoPanel(data) {
     panel.style.display = 'block';
 }
 
-function fadeUnconnectedNodes(nodeMeshes, edgeMeshes, nodeId) {
+function fadeUnconnectedNodes(nodeMeshes, edgeMeshes, nodeId, parentMap) {
     const connected = new Set([nodeId]);
     for (const line of edgeMeshes) {
         const edge = line.userData.edgeData;
-        if (edge.from === nodeId) connected.add(edge.to);
-        if (edge.to === nodeId) connected.add(edge.from);
+        // Direct match or parent file match for call edges
+        const fromMatch = edge.from === nodeId || (parentMap && parentMap[edge.from] === nodeId);
+        const toMatch = edge.to === nodeId || (parentMap && parentMap[edge.to] === nodeId);
+        if (fromMatch) {
+            connected.add(edge.to);
+            if (parentMap && parentMap[edge.to]) connected.add(parentMap[edge.to]);
+        }
+        if (toMatch) {
+            connected.add(edge.from);
+            if (parentMap && parentMap[edge.from]) connected.add(parentMap[edge.from]);
+        }
     }
     for (const [id, mesh] of Object.entries(nodeMeshes)) {
         mesh.material.opacity = connected.has(id) ? 1.0 : 0.15;
