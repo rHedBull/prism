@@ -8,7 +8,77 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
     const infoPanel = document.getElementById('info-panel');
     let hoveredMesh = null;
     let focusedLayer = null;
-    const originalColors = new Map();
+    const spotlightLines = [];
+
+    // Build descendant map from _layerParent: parentId -> [childIds] (recursive)
+    const childMap = {};
+    for (const [, data] of nodeDataMap) {
+        const pid = data._layerParent;
+        if (pid) {
+            if (!childMap[pid]) childMap[pid] = [];
+            childMap[pid].push(data.id);
+        }
+    }
+
+    function getDescendants(nodeId) {
+        const result = new Set();
+        const stack = [nodeId];
+        while (stack.length > 0) {
+            const id = stack.pop();
+            const children = childMap[id] || [];
+            for (const cid of children) {
+                result.add(cid);
+                stack.push(cid);
+            }
+        }
+        return result;
+    }
+
+    function getAncestors(nodeId) {
+        const result = new Set();
+        const data = [...nodeDataMap.values()].find(d => d.id === nodeId);
+        if (!data) return result;
+        let pid = data._layerParent;
+        while (pid) {
+            result.add(pid);
+            const parentData = [...nodeDataMap.values()].find(d => d.id === pid);
+            pid = parentData ? parentData._layerParent : null;
+        }
+        return result;
+    }
+
+    function clearSpotlights() {
+        for (const obj of spotlightLines) {
+            scene.remove(obj);
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) obj.material.dispose();
+        }
+        spotlightLines.length = 0;
+    }
+
+    function drawSpotlight(parentMesh, childMeshes, color) {
+        for (const childMesh of childMeshes) {
+            const start = parentMesh.position.clone();
+            const end = childMesh.position.clone();
+            // Vertical dashed line from parent down to child
+            const points = [
+                new THREE.Vector3(start.x, start.y - 0.5, start.z),
+                new THREE.Vector3(end.x, end.y + 0.5, end.z),
+            ];
+            const geo = new THREE.BufferGeometry().setFromPoints(points);
+            const mat = new THREE.LineDashedMaterial({
+                color,
+                transparent: true,
+                opacity: 0.4,
+                dashSize: 0.6,
+                gapSize: 0.3,
+            });
+            const line = new THREE.Line(geo, mat);
+            line.computeLineDistances();
+            scene.add(line);
+            spotlightLines.push(line);
+        }
+    }
 
     window.addEventListener('mousemove', (event) => {
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -26,16 +96,45 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                     hoveredMesh.material.emissive.setHex(0x000000);
                     resetEdgeHighlights(edgeMeshes);
                     resetNodeOpacity(nodeMeshes);
+                    clearSpotlights();
                 }
 
                 hoveredMesh = mesh;
-                originalColors.set(mesh, mesh.material.color.getHex());
                 mesh.material.emissive.setHex(0x333333);
 
                 const data = nodeDataMap.get(mesh);
                 showInfoPanel(data);
                 highlightEdges(edgeMeshes, data.id, parentMap);
-                fadeUnconnectedNodes(nodeMeshes, edgeMeshes, data.id, parentMap);
+
+                // Highlight descendants and ancestors
+                const descendants = getDescendants(data.id);
+                const ancestors = getAncestors(data.id);
+                const family = new Set([data.id, ...descendants, ...ancestors]);
+
+                // Fade unrelated nodes, highlight family
+                for (const [id, m] of Object.entries(nodeMeshes)) {
+                    if (family.has(id)) {
+                        m.material.opacity = 1.0;
+                        m.material.transparent = true;
+                        // Glow descendants
+                        if (descendants.has(id)) {
+                            m.material.emissive.setHex(0x222222);
+                        }
+                    } else {
+                        m.material.opacity = 0.12;
+                        m.material.transparent = true;
+                    }
+                }
+
+                // Draw spotlight lines to direct children
+                const directChildren = childMap[data.id] || [];
+                const childMeshes = directChildren
+                    .map(cid => nodeMeshes[cid])
+                    .filter(Boolean);
+                if (childMeshes.length > 0) {
+                    const color = mesh.material.color.getHex();
+                    drawSpotlight(mesh, childMeshes, color);
+                }
             }
         } else if (hoveredMesh) {
             hoveredMesh.material.emissive.setHex(0x000000);
@@ -43,6 +142,12 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
             infoPanel.style.display = 'none';
             resetEdgeHighlights(edgeMeshes);
             resetNodeOpacity(nodeMeshes);
+            clearSpotlights();
+            // Reset emissive on all
+            for (const m of Object.values(nodeMeshes)) {
+                m.material.emissive.setHex(0x000000);
+                m.material.emissiveIntensity = 0.15;
+            }
         }
     });
 
@@ -59,11 +164,9 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
             const y = layer.position.y;
 
             if (focusedLayer === level) {
-                // Unfocus — back to vertical view
                 focusedLayer = null;
                 animateCameraFn(camera, controls, defaultCameraPos, defaultTarget);
             } else {
-                // Focus this layer — horizontal view
                 focusedLayer = level;
                 const targetPos = new THREE.Vector3(LAYER_SIZE * 0.7, y + 5, LAYER_SIZE * 0.7);
                 const targetLookAt = new THREE.Vector3(0, y, 0);
@@ -91,30 +194,10 @@ function showInfoPanel(data) {
     panel.style.display = 'block';
 }
 
-function fadeUnconnectedNodes(nodeMeshes, edgeMeshes, nodeId, parentMap) {
-    const connected = new Set([nodeId]);
-    for (const line of edgeMeshes) {
-        const edge = line.userData.edgeData;
-        // Direct match or parent file match for call edges
-        const fromMatch = edge.from === nodeId || (parentMap && parentMap[edge.from] === nodeId);
-        const toMatch = edge.to === nodeId || (parentMap && parentMap[edge.to] === nodeId);
-        if (fromMatch) {
-            connected.add(edge.to);
-            if (parentMap && parentMap[edge.to]) connected.add(parentMap[edge.to]);
-        }
-        if (toMatch) {
-            connected.add(edge.from);
-            if (parentMap && parentMap[edge.from]) connected.add(parentMap[edge.from]);
-        }
-    }
-    for (const [id, mesh] of Object.entries(nodeMeshes)) {
-        mesh.material.opacity = connected.has(id) ? 1.0 : 0.15;
-        mesh.material.transparent = true;
-    }
-}
-
 function resetNodeOpacity(nodeMeshes) {
     for (const mesh of Object.values(nodeMeshes)) {
         mesh.material.opacity = 1.0;
+        mesh.material.emissive.setHex(0x000000);
+        mesh.material.emissiveIntensity = 0.15;
     }
 }
