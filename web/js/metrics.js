@@ -26,9 +26,9 @@ const TYPE_COLORS = {
 };
 
 const ROLE_COLORS = {
-    data: 0x26A69A,       // teal green
-    control: 0xFF7043,    // warm orange
-    hybrid: 0x78909C,     // muted slate
+    data: 0x00E5CC,       // bright cyan-teal
+    control: 0xFF6B35,    // vivid orange
+    hybrid: 0x9E9E9E,     // neutral gray
 };
 
 // Current selections (module-level state)
