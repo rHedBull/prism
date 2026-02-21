@@ -4,8 +4,8 @@ import * as THREE from 'three';
 const LOC_SCALE = 0.08;
 
 // Available metrics for size and color dropdowns
-export const SIZE_METRICS = ['complexity', 'lines_of_code', 'export_count', 'fan_in', 'fan_out', 'child_count'];
-export const COLOR_METRICS = ['language', 'lines_of_code', 'export_count', 'fan_in', 'fan_out', 'child_count'];
+export const SIZE_METRICS = ['complexity', 'lines_of_code', 'cyclomatic_complexity', 'param_count', 'max_nesting', 'export_count', 'fan_in', 'fan_out', 'coupling', 'instability', 'child_count'];
+export const COLOR_METRICS = ['language', 'type', 'lines_of_code', 'cyclomatic_complexity', 'param_count', 'max_nesting', 'export_count', 'fan_in', 'fan_out', 'coupling', 'instability', 'child_count'];
 
 const LANGUAGE_COLORS = {
     python: 0x8c60f3,
@@ -13,6 +13,14 @@ const LANGUAGE_COLORS = {
     typescriptreact: 0x6a3fd4,
     javascript: 0xb89ef7,
     javascriptreact: 0xb89ef7,
+};
+
+const TYPE_COLORS = {
+    function: 0x4A90D9,   // blue
+    class: 0x8c60f3,      // purple
+    component: 0x2ECC71,  // green
+    container: 0xE67E22,  // orange
+    system: 0xE74C3C,     // red
 };
 
 // Current selections (module-level state)
@@ -35,7 +43,7 @@ export function setColorMetric(m) { _colorMetric = m; }
 function resolveSizeMetric(node) {
     if (_sizeMetric !== 'complexity') return _sizeMetric;
     const level = node.abstraction_level ?? 0;
-    return level === 0 ? 'lines_of_code' : 'child_count';
+    return level === 0 ? 'cyclomatic_complexity' : 'child_count';
 }
 
 /**
@@ -66,6 +74,9 @@ export function computeDerivedMetrics(nodes, edges) {
         node.fan_in = fanIn[node.id] || 0;
         node.fan_out = fanOut[node.id] || 0;
         node.child_count = childCount[node.id] || 0;
+        const total = node.fan_in + node.fan_out;
+        node.coupling = total;
+        node.instability = total > 0 ? +(node.fan_out / total).toFixed(2) : 0;
     }
 }
 
@@ -96,6 +107,10 @@ export function computeColor(node, metricRange) {
         return LANGUAGE_COLORS[node.language] || 0x888888;
     }
 
+    if (_colorMetric === 'type') {
+        return TYPE_COLORS[node.type] || 0x888888;
+    }
+
     const value = node[_colorMetric] || 0;
     const { min, max } = metricRange;
     const t = max > min ? (value - min) / (max - min) : 0;
@@ -119,7 +134,7 @@ export function computeColor(node, metricRange) {
  * Compute min/max of the active color metric across a flat list of nodes.
  */
 export function computeMetricRange(allNodes) {
-    if (_colorMetric === 'language') return { min: 0, max: 1 };
+    if (_colorMetric === 'language' || _colorMetric === 'type') return { min: 0, max: 1 };
     let min = Infinity, max = -Infinity;
     for (const node of allNodes) {
         const v = node[_colorMetric] || 0;
