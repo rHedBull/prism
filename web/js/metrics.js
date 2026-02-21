@@ -84,6 +84,7 @@ export function computeDerivedMetrics(nodes, edges) {
  * Compute block height from the active size metric.
  */
 export function computeHeight(node) {
+    if (_sizeMetric === 'none') return 1.0;
     const metric = resolveSizeMetric(node);
     const value = node[metric] || 0;
     return Math.max(0.8, Math.log2(Math.max(1, value)) * LOC_SCALE * 8);
@@ -93,6 +94,7 @@ export function computeHeight(node) {
  * Return the effective size metric name and value for a node (for info panel).
  */
 export function getSizeInfo(node) {
+    if (_sizeMetric === 'none') return { metric: 'none', value: '—' };
     const metric = resolveSizeMetric(node);
     return { metric, value: node[metric] ?? 0 };
 }
@@ -103,6 +105,8 @@ export function getSizeInfo(node) {
  * For numeric metrics: returns sequential gradient blue->red.
  */
 export function computeColor(node, metricRange) {
+    if (_colorMetric === 'none') return 0x8c60f3;
+
     if (_colorMetric === 'language') {
         return LANGUAGE_COLORS[node.language] || 0x888888;
     }
@@ -134,7 +138,7 @@ export function computeColor(node, metricRange) {
  * Compute min/max of the active color metric across a flat list of nodes.
  */
 export function computeMetricRange(allNodes) {
-    if (_colorMetric === 'language' || _colorMetric === 'type') return { min: 0, max: 1 };
+    if (_colorMetric === 'none' || _colorMetric === 'language' || _colorMetric === 'type') return { min: 0, max: 1 };
     let min = Infinity, max = -Infinity;
     for (const node of allNodes) {
         const v = node[_colorMetric] || 0;
