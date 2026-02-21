@@ -6,3 +6,4 @@ dist/
 .callgraph/
 node_modules/
 test-project/
+.playwright-mcp/
