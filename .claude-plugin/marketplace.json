@@ -1,0 +1,21 @@
+{
+  "name": "prism-marketplace",
+  "owner": {
+    "name": "Hendrik"
+  },
+  "metadata": {
+    "description": "Architecture visualization and diff analysis",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "prism",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/rHedBull/prism.git"
+      },
+      "description": "Architecture visualization — diff and impact analysis for codebases",
+      "version": "0.1.0"
+    }
+  ]
+}
