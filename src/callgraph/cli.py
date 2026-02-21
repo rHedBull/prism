@@ -53,6 +53,33 @@ def cmd_diff(args):
           f"~{s['modified_nodes']} modified, >{s['moved_nodes']} moved")
 
 
+def cmd_plan(args):
+    """Apply a plan to a graph and write diff.json."""
+    import json
+    import shutil
+    from callgraph.plan_engine import apply_plan, load_plan
+
+    graph_dir = Path(args.graph_dir) / ".callgraph"
+    graph = {
+        "nodes": json.loads((graph_dir / "nodes.json").read_text()),
+        "edges": json.loads((graph_dir / "edges.json").read_text()),
+    }
+
+    plan = load_plan(args.plan)
+    diff = apply_plan(graph, plan)
+
+    out = Path(args.output)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "diff.json").write_text(json.dumps(diff, indent=2))
+    shutil.copy2(args.plan, out / "plan.json")
+
+    s = diff["summary"]
+    print(f"Plan '{plan.get('name', 'unnamed')}' applied.")
+    print(f"  +{s['added_nodes']} added, -{s['removed_nodes']} removed, "
+          f"~{s['modified_nodes']} modified, >{s['moved_nodes']} moved")
+    print(f"Output: {out}/diff.json")
+
+
 def cmd_serve(args):
     import shutil
     port = args.port
@@ -92,12 +119,20 @@ def main():
     diff_parser.add_argument("--ref-a", default="unknown", help="Label for graph_a")
     diff_parser.add_argument("--ref-b", default="unknown", help="Label for graph_b")
 
+    # plan subcommand
+    plan_parser = subparsers.add_parser("plan", help="Apply an architectural plan and produce diff")
+    plan_parser.add_argument("plan", help="Path to plan.json")
+    plan_parser.add_argument("--graph-dir", default=".", help="Path to codebase with .callgraph/")
+    plan_parser.add_argument("-o", "--output", default=".callgraph", help="Output directory for diff.json")
+
     args = parser.parse_args()
 
     if args.command == "build":
         cmd_build(args)
     elif args.command == "diff":
         cmd_diff(args)
+    elif args.command == "plan":
+        cmd_plan(args)
     elif args.command == "serve":
         cmd_serve(args)
     else:
