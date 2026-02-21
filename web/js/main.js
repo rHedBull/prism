@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { createScene, animate, animateCamera, panelState } from './scene.js';
-import { loadGraph, groupByAbstractionLevel } from './graph-loader.js';
+import { createScene, initRenderer, animateCamera, requestRender, panelState } from './scene.js';
+import { loadGraph, groupByAbstractionLevel, loadDiff } from './graph-loader.js';
 import { createLayers, LAYER_SIZE } from './layers.js';
 import { createEdges } from './edges.js';
 import { setupInteraction } from './interaction.js';
 import { createTreePanel } from './tree-panel.js';
 import { initConfigPanel } from './config-panel.js';
+import { activateDiffMode, deactivateDiffMode } from './diff-overlay.js';
 
 const { scene, camera, renderer, controls, resizeCanvas } = createScene();
 
@@ -30,6 +31,8 @@ function setupPanelToggles() {
     function updateControlsPosition() {
         const leftOffset = panelState.left ? 280 : 0;
         controlsEl.style.left = `${leftOffset + 16}px`;
+        const diffSummary = document.getElementById('diff-summary');
+        if (diffSummary) diffSummary.style.left = `${leftOffset + 16}px`;
     }
 
     toggleLeft.addEventListener('click', () => {
@@ -39,6 +42,7 @@ function setupPanelToggles() {
         toggleLeft.textContent = panelState.left ? '\u25C2' : '\u25B8';
         updateControlsPosition();
         resizeCanvas();
+        requestRender();
     });
 
     toggleRight.addEventListener('click', () => {
@@ -47,6 +51,7 @@ function setupPanelToggles() {
         toggleRight.classList.toggle('panel-closed', !panelState.right);
         toggleRight.textContent = panelState.right ? '\u25B8' : '\u25C2';
         resizeCanvas();
+        requestRender();
     });
 
     updateControlsPosition();
@@ -58,7 +63,7 @@ async function init() {
     try {
         const graph = await loadGraph('.');
         const layerGroups = groupByAbstractionLevel(graph.nodes);
-        const { layerMeshes, nodeMeshes, nodeDataMap } = createLayers(layerGroups, graph.edges, scene);
+        const { layerMeshes, nodeMeshes, nodeDataMap } = await createLayers(layerGroups, graph.edges, scene);
         const edgeMeshes = createEdges(graph.edges, nodeMeshes, scene, graph.nodes);
 
         // Build parent map for call edge hover resolution
@@ -80,11 +85,25 @@ async function init() {
         // Init config panel with mesh references
         initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap);
 
+        // Check for diff.json and activate diff mode if present
+        const diff = await loadDiff('.');
+        if (diff) {
+            activateDiffMode(diff, nodeMeshes, edgeMeshes, scene);
+            requestRender();
+        }
+
+        // Wire up Clear Diff button
+        document.getElementById('btn-clear-diff').addEventListener('click', () => {
+            deactivateDiffMode(nodeMeshes, edgeMeshes);
+            requestRender();
+        });
+
+        requestRender();
         console.log(`Loaded ${graph.nodes.length} nodes, ${graph.edges.length} edges`);
     } catch (err) {
         console.error('Failed to load graph:', err);
     }
 }
 
+initRenderer(renderer, scene, camera, controls);
 init();
-animate(renderer, scene, camera, controls);

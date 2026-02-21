@@ -26,7 +26,7 @@ const LAYER_SPACING = 12;
 const LOC_SCALE = 0.08;
 export const LAYER_SIZE = 50;
 
-export function createLayers(layerGroups, edges, scene) {
+export async function createLayers(layerGroups, edges, scene, onProgress) {
     const layerMeshes = {};
     const nodeMeshes = {};
     const nodeDataMap = new Map();
@@ -123,18 +123,20 @@ export function createLayers(layerGroups, edges, scene) {
                     emissive: color,
                     emissiveIntensity: 0.15,
                     shininess: 60,
-                    transparent: true,
-                    opacity: 1.0,
                 });
                 const mesh = new THREE.Mesh(geo, mat);
                 mesh.position.set(box.cx, y + height / 2 + 0.1, box.cz);
-                mesh.userData = { type: 'node', nodeData: node };
+                mesh.userData = { type: 'node', nodeData: node, _origColor: color };
                 scene.add(mesh);
 
                 nodeMeshes[node.id] = mesh;
                 nodeDataMap.set(mesh, node);
             }
         }
+
+        // Yield to browser after each layer so the page stays responsive
+        if (onProgress) onProgress(level, nodes.length);
+        await new Promise(r => setTimeout(r, 0));
     }
 
     return { layerMeshes, nodeMeshes, nodeDataMap };

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { highlightEdges, resetEdgeHighlights } from './edges.js';
-import { getLeftOffset, getCanvasWidth } from './scene.js';
+import { getLeftOffset, getCanvasWidth, requestRender } from './scene.js';
+import { getDiffState, getDiffHoverInfo } from './diff-overlay.js';
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -24,11 +25,16 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
     _nodeMeshesRef = nodeMeshes;
     _parentMapRef = parentMap;
 
-    // Build id -> mesh lookup
+    // Build id -> mesh and id -> data lookups
     _idToMesh = {};
+    const _idToData = {};
     for (const [mesh, data] of nodeDataMap) {
         _idToMesh[data.id] = mesh;
+        _idToData[data.id] = data;
     }
+
+    // Pre-build mesh array once for raycasting (avoid allocation per mousemove)
+    const _raycastMeshes = Array.from(nodeDataMap.keys());
 
     // Build descendant map from _layerParent: parentId -> [childIds] (recursive)
     const childMap = {};
@@ -47,8 +53,10 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
             const id = stack.pop();
             const children = childMap[id] || [];
             for (const cid of children) {
-                result.add(cid);
-                stack.push(cid);
+                if (!result.has(cid)) {
+                    result.add(cid);
+                    stack.push(cid);
+                }
             }
         }
         return result;
@@ -56,12 +64,12 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
 
     function getAncestors(nodeId) {
         const result = new Set();
-        const data = [...nodeDataMap.values()].find(d => d.id === nodeId);
+        const data = _idToData[nodeId];
         if (!data) return result;
         let pid = data._layerParent;
-        while (pid) {
+        while (pid && !result.has(pid)) {
             result.add(pid);
-            const parentData = [...nodeDataMap.values()].find(d => d.id === pid);
+            const parentData = _idToData[pid];
             pid = parentData ? parentData._layerParent : null;
         }
         return result;
@@ -80,7 +88,6 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         for (const childMesh of childMeshes) {
             const start = parentMesh.position.clone();
             const end = childMesh.position.clone();
-            // Vertical dashed line from parent down to child
             const points = [
                 new THREE.Vector3(start.x, start.y - 0.5, start.z),
                 new THREE.Vector3(end.x, end.y + 0.5, end.z),
@@ -100,20 +107,44 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         }
     }
 
+    function applyHoverHighlight(data) {
+        const descendants = getDescendants(data.id);
+        const ancestors = getAncestors(data.id);
+        const family = new Set([data.id, ...descendants, ...ancestors]);
+
+        for (const [id, m] of Object.entries(nodeMeshes)) {
+            if (family.has(id)) {
+                m.material.color.setHex(m.userData._origColor);
+                m.material.emissiveIntensity = descendants.has(id) ? 0.5 : 0.15;
+            } else {
+                m.material.color.setHex(0xd8d6dc);
+                m.material.emissiveIntensity = 0.0;
+            }
+        }
+
+        const directChildren = childMap[data.id] || [];
+        const childMeshes = directChildren.map(cid => nodeMeshes[cid]).filter(Boolean);
+        if (childMeshes.length > 0) {
+            drawSpotlight(data.id === data.id ? _idToMesh[data.id] : null, childMeshes, _idToMesh[data.id].material.color.getHex());
+        }
+    }
+
+    let _mouseMoveQueued = false;
     window.addEventListener('mousemove', (event) => {
-        const leftOffset = getLeftOffset();
-        const canvasWidth = getCanvasWidth();
-        mouse.x = ((event.clientX - leftOffset) / canvasWidth) * 2 - 1;
+        mouse.x = ((event.clientX - getLeftOffset()) / getCanvasWidth()) * 2 - 1;
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
+        if (_mouseMoveQueued) return;
+        _mouseMoveQueued = true;
+        requestAnimationFrame(() => {
+        _mouseMoveQueued = false;
+
         raycaster.setFromCamera(mouse, camera);
-        const meshes = Array.from(nodeDataMap.keys());
-        const intersects = raycaster.intersectObjects(meshes);
+        const intersects = raycaster.intersectObjects(_raycastMeshes);
 
         if (intersects.length > 0) {
             const mesh = intersects[0].object;
             if (mesh !== hoveredMesh) {
-                // Reset previous
                 if (hoveredMesh) {
                     hoveredMesh.material.emissive.setHex(0x000000);
                     resetEdgeHighlights(edgeMeshes);
@@ -129,27 +160,22 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                 showInfoPanel(data);
                 highlightEdges(edgeMeshes, data.id, parentMap);
 
-                // Sync tree panel selection
                 if (window._graphHoverCallback) window._graphHoverCallback(data.id);
 
-                // Highlight descendants and ancestors
                 const descendants = getDescendants(data.id);
                 const ancestors = getAncestors(data.id);
                 const family = new Set([data.id, ...descendants, ...ancestors]);
 
-                // Fade unrelated nodes, highlight family
                 for (const [id, m] of Object.entries(nodeMeshes)) {
                     if (family.has(id)) {
-                        m.material.opacity = 1.0;
-                        if (descendants.has(id)) {
-                            m.material.emissiveIntensity = 0.5;
-                        }
+                        m.material.color.setHex(m.userData._origColor);
+                        m.material.emissiveIntensity = descendants.has(id) ? 0.5 : 0.15;
                     } else {
-                        m.material.opacity = 0.08;
+                        m.material.color.setHex(0xd8d6dc);
+                        m.material.emissiveIntensity = 0.0;
                     }
                 }
 
-                // Draw spotlight lines to direct children
                 const directChildren = childMap[data.id] || [];
                 const childMeshes = directChildren
                     .map(cid => nodeMeshes[cid])
@@ -158,6 +184,7 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                     const color = mesh.material.color.getHex();
                     drawSpotlight(mesh, childMeshes, color);
                 }
+                requestRender();
             }
         } else if (hoveredMesh && !hoverFromTree) {
             hoveredMesh.material.emissiveIntensity = 0.15;
@@ -167,13 +194,14 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
             resetNodeOpacity(nodeMeshes);
             clearSpotlights();
             if (window._graphHoverCallback) window._graphHoverCallback(null);
+            requestRender();
         }
-    });
+        }); // end requestAnimationFrame
+    }); // end mousemove
 
     window.addEventListener('click', (event) => {
         raycaster.setFromCamera(mouse, camera);
 
-        // Check layer planes
         const layerPlanes = Object.values(layerMeshes);
         const layerHits = raycaster.intersectObjects(layerPlanes, true);
 
@@ -207,7 +235,6 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         const mesh = _idToMesh[nodeId];
         if (!mesh) return;
 
-        // Reset previous
         if (hoveredMesh) {
             hoveredMesh.material.emissive.setHex(0x000000);
             resetEdgeHighlights(edgeMeshes);
@@ -229,10 +256,11 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
 
         for (const [id, m] of Object.entries(nodeMeshes)) {
             if (family.has(id)) {
-                m.material.opacity = 1.0;
-                if (descendants.has(id)) m.material.emissiveIntensity = 0.5;
+                m.material.color.setHex(m.userData._origColor);
+                m.material.emissiveIntensity = descendants.has(id) ? 0.5 : 0.15;
             } else {
-                m.material.opacity = 0.08;
+                m.material.color.setHex(0xd8d6dc);
+                m.material.emissiveIntensity = 0.0;
             }
         }
 
@@ -241,6 +269,7 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         if (childMeshes.length > 0) {
             drawSpotlight(mesh, childMeshes, mesh.material.color.getHex());
         }
+        requestRender();
     };
 
     window._treePanelLeaveCallback = () => {
@@ -252,6 +281,7 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
             resetEdgeHighlights(edgeMeshes);
             resetNodeOpacity(nodeMeshes);
             clearSpotlights();
+            requestRender();
         }
     };
 }
@@ -263,12 +293,35 @@ function showInfoPanel(data) {
     document.getElementById('info-loc').textContent = data.lines_of_code;
     document.getElementById('info-lang').textContent = data.language || '—';
     document.getElementById('info-path').textContent = data.file_path;
+
+    const diffDetails = document.getElementById('info-diff-details');
+    const { diffActive, diffData } = getDiffState();
+    if (diffActive && diffData) {
+        const lines = getDiffHoverInfo(data.id, diffData);
+        if (lines && lines.length > 0) {
+            diffDetails.textContent = '';
+            for (const line of lines) {
+                const div = document.createElement('div');
+                div.textContent = line;
+                if (line.startsWith('+')) div.style.color = '#4CAF50';
+                else if (line.startsWith('-')) div.style.color = '#F44336';
+                else div.style.color = '#FFC107';
+                diffDetails.appendChild(div);
+            }
+            diffDetails.style.display = 'block';
+        } else {
+            diffDetails.style.display = 'none';
+        }
+    } else {
+        diffDetails.style.display = 'none';
+    }
+
     panel.style.display = 'block';
 }
 
 function resetNodeOpacity(nodeMeshes) {
     for (const [id, mesh] of Object.entries(nodeMeshes)) {
-        mesh.material.opacity = 1.0;
+        mesh.material.color.setHex(mesh.userData._origColor);
         mesh.material.emissiveIntensity = 0.15;
     }
 }

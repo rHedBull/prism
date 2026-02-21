@@ -1,6 +1,7 @@
 /**
  * Right-side config panel: controls visibility of layers, node types, edge types, languages.
  */
+import { requestRender } from './scene.js';
 
 export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap) {
     // Auto-populate languages from graph data
@@ -52,6 +53,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
                 if (nodeLevel === level) mesh.visible = visible;
             }
             updateEdgeVisibility();
+            requestRender('config');
         });
     }
 
@@ -65,6 +67,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
                 if (data.type === type) mesh.visible = visible;
             }
             updateEdgeVisibility();
+            requestRender('config');
         });
     }
 
@@ -74,6 +77,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
         if (!checkbox) continue;
         checkbox.addEventListener('change', () => {
             updateEdgeVisibility();
+            requestRender('config');
         });
     }
 
@@ -87,6 +91,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
                 if (data.language === lang) mesh.visible = visible;
             }
             updateEdgeVisibility();
+            requestRender('config');
         });
     }
 }

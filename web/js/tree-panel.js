@@ -56,9 +56,11 @@ export function createTreePanel(graph, layerGroups, nodeMeshes, camera, controls
     for (const id of roots) expanded.add(id);
 
     let selectedNodeId = null;
+    const _rowById = new Map();
 
     function renderTree(filter = '') {
         // Clear all children safely
+        _rowById.clear();
         while (treeContainer.firstChild) {
             treeContainer.removeChild(treeContainer.firstChild);
         }
@@ -176,6 +178,7 @@ export function createTreePanel(graph, layerGroups, nodeMeshes, camera, controls
         });
 
         container.appendChild(row);
+        _rowById.set(nodeId, row);
 
         if (hasChildren && isExpanded) {
             for (const childId of sortIds(children)) {
@@ -219,16 +222,31 @@ export function createTreePanel(graph, layerGroups, nodeMeshes, camera, controls
     // Initial render
     renderTree('');
 
+    // Lightweight selection update — toggle CSS class instead of full re-render
+    function _updateSelection(newId) {
+        if (newId === selectedNodeId) return;
+        // Remove old selection
+        if (selectedNodeId) {
+            const oldRow = _rowById.get(selectedNodeId);
+            if (oldRow) oldRow.classList.remove('selected');
+        }
+        selectedNodeId = newId;
+        // Add new selection
+        if (newId) {
+            const newRow = _rowById.get(newId);
+            if (newRow) {
+                newRow.classList.add('selected');
+                newRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        }
+    }
+
     return {
         selectNode(nodeId) {
-            selectedNodeId = nodeId;
-            renderTree(searchInput.value);
-            const selected = treeContainer.querySelector('.tree-row.selected');
-            if (selected) selected.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            _updateSelection(nodeId);
         },
         clearSelection() {
-            selectedNodeId = null;
-            renderTree(searchInput.value);
+            _updateSelection(null);
         },
     };
 }

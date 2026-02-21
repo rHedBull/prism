@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import * as TWEEN from '@tweenjs/tween.js';
+import { createRenderScheduler } from './render-scheduler.js';
 
 // Panel state shared across modules
 export const panelState = { left: true, right: true };
@@ -25,21 +26,21 @@ export function createScene() {
     scene.background = new THREE.Color(0xf8f6fc);
     scene.fog = new THREE.FogExp2(0xf8f6fc, 0.004);
 
-    const canvasW = getCanvasWidth();
+    const canvasW = Math.max(1, getCanvasWidth());
+    const canvasH = Math.max(1, window.innerHeight);
     const camera = new THREE.PerspectiveCamera(
-        60, canvasW / window.innerHeight, 0.1, 1000
+        60, canvasW / canvasH, 0.1, 1000
     );
     camera.position.set(30, 40, 30);
     camera.lookAt(0, 0, 0);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(canvasW, window.innerHeight);
+    renderer.setSize(canvasW, canvasH);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.domElement.style.marginLeft = `${getLeftOffset()}px`;
     document.body.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
+    controls.enableDamping = false;
     controls.minDistance = 5;
     controls.maxDistance = 200;
 
@@ -52,26 +53,43 @@ export function createScene() {
     scene.add(directionalLight);
 
     function resizeCanvas() {
-        const w = getCanvasWidth();
-        camera.aspect = w / window.innerHeight;
+        const w = Math.max(1, getCanvasWidth());
+        const h = Math.max(1, window.innerHeight);
+        camera.aspect = w / h;
         camera.updateProjectionMatrix();
-        renderer.setSize(w, window.innerHeight);
+        renderer.setSize(w, h);
         renderer.domElement.style.marginLeft = `${getLeftOffset()}px`;
     }
 
-    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('resize', () => {
+        resizeCanvas();
+        requestRender();
+    });
 
     return { scene, camera, renderer, controls, resizeCanvas };
 }
 
-export function animate(renderer, scene, camera, controls) {
-    function loop() {
-        requestAnimationFrame(loop);
-        controls.update();
-        TWEEN.update();
-        renderer.render(scene, camera);
-    }
-    loop();
+let _scheduler = null;
+
+export function requestRender() {
+    if (_scheduler) _scheduler.requestRender();
+}
+
+export function initRenderer(renderer, scene, camera, controls) {
+    _scheduler = createRenderScheduler({
+        scheduleFrame: requestAnimationFrame,
+        render: () => {
+            TWEEN.update();
+            renderer.render(scene, camera);
+        },
+        hasPendingWork: () => TWEEN.getAll().length > 0,
+    });
+
+    // Re-render on orbit/zoom
+    controls.addEventListener('change', () => requestRender());
+
+    // Initial render
+    requestRender();
 }
 
 export function animateCamera(camera, controls, targetPos, targetLookAt, duration = 1000) {
@@ -84,6 +102,8 @@ export function animateCamera(camera, controls, targetPos, targetLookAt, duratio
         .onUpdate(({ t }) => {
             camera.position.lerpVectors(startPos, targetPos, t);
             controls.target.lerpVectors(startTarget, targetLookAt, t);
+            requestRender();
         })
         .start();
+    requestRender();
 }
