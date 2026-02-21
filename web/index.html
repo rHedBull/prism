@@ -198,6 +198,21 @@
             cursor: pointer;
             flex: 1;
         }
+        .config-item select {
+            flex: 1;
+            padding: 3px 6px;
+            border: 1px solid #cccad2;
+            border-radius: 3px;
+            background: #fff;
+            color: #353148;
+            font-family: monospace;
+            font-size: 11px;
+            cursor: pointer;
+            outline: none;
+        }
+        .config-item select:focus {
+            border-color: #8c60f3;
+        }
         .config-divider {
             height: 1px;
             background: #e4e0ec;
@@ -275,6 +290,32 @@
         </div>
         <div id="config-content">
             <div class="config-section">
+                <div class="config-section-title">Metrics</div>
+                <div class="config-item">
+                    <label for="metric-size">Size</label>
+                    <select id="metric-size">
+                        <option value="complexity" selected>Complexity</option>
+                        <option value="lines_of_code">Lines of Code</option>
+                        <option value="export_count">Export Count</option>
+                        <option value="fan_in">Fan In</option>
+                        <option value="fan_out">Fan Out</option>
+                        <option value="child_count">Child Count</option>
+                    </select>
+                </div>
+                <div class="config-item">
+                    <label for="metric-color">Color</label>
+                    <select id="metric-color">
+                        <option value="language" selected>Language</option>
+                        <option value="lines_of_code">Lines of Code</option>
+                        <option value="export_count">Export Count</option>
+                        <option value="fan_in">Fan In</option>
+                        <option value="fan_out">Fan Out</option>
+                        <option value="child_count">Child Count</option>
+                    </select>
+                </div>
+            </div>
+            <div class="config-divider"></div>
+            <div class="config-section">
                 <div class="config-section-title">Layers</div>
                 <div class="config-item"><input type="checkbox" id="layer-3" checked /><label for="layer-3">C1 — Context</label></div>
                 <div class="config-item"><input type="checkbox" id="layer-2" checked /><label for="layer-2">C2 — Container</label></div>
@@ -308,7 +349,7 @@
     <div id="info-panel">
         <h3 id="info-name"></h3>
         <div class="field"><span class="label">Type: </span><span id="info-type"></span></div>
-        <div class="field"><span class="label">LOC: </span><span id="info-loc"></span></div>
+        <div class="field"><span class="label" id="info-loc-label">LOC: </span><span id="info-loc"></span></div>
         <div class="field"><span class="label">Language: </span><span id="info-lang"></span></div>
         <div class="field"><span class="label">Path: </span><span id="info-path"></span></div>
     </div>

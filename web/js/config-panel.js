@@ -1,7 +1,9 @@
 /**
  * Right-side config panel: controls visibility of layers, node types, edge types, languages.
  */
+import * as THREE from 'three';
 import { requestRender } from './scene.js';
+import { setSizeMetric, setColorMetric, computeHeight, computeColor, computeMetricRange } from './metrics.js';
 
 export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap) {
     // Auto-populate languages from graph data
@@ -92,6 +94,51 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
             }
             updateEdgeVisibility();
             requestRender('config');
+        });
+    }
+
+    // Metric dropdowns
+    function reapplyMetrics() {
+        const metricRange = computeMetricRange(
+            Array.from(nodeDataMap.values())
+        );
+        for (const [mesh, data] of nodeDataMap) {
+            // Update height
+            const newHeight = computeHeight(data);
+            const oldHeight = mesh.geometry.parameters.height;
+            if (Math.abs(newHeight - oldHeight) > 0.01) {
+                const w = mesh.geometry.parameters.width;
+                const d = mesh.geometry.parameters.depth;
+                mesh.geometry.dispose();
+                mesh.geometry = new THREE.BoxGeometry(w, newHeight, d);
+                const level = data.abstraction_level ?? 0;
+                const layerY = level * 12;
+                mesh.position.y = layerY + newHeight / 2 + 0.1;
+            }
+
+            // Update color
+            const newColor = computeColor(data, metricRange);
+            mesh.material.color.setHex(newColor);
+            mesh.material.emissive.setHex(newColor);
+            mesh.material.emissiveIntensity = 0.15;
+            mesh.userData._origColor = newColor;
+        }
+        requestRender('metrics');
+    }
+
+    const sizeSelect = document.getElementById('metric-size');
+    if (sizeSelect) {
+        sizeSelect.addEventListener('change', () => {
+            setSizeMetric(sizeSelect.value);
+            reapplyMetrics();
+        });
+    }
+
+    const colorSelect = document.getElementById('metric-color');
+    if (colorSelect) {
+        colorSelect.addEventListener('change', () => {
+            setColorMetric(colorSelect.value);
+            reapplyMetrics();
         });
     }
 }
