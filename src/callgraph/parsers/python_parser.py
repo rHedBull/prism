@@ -30,6 +30,7 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
         if name_node:
             name = source[name_node.start_byte:name_node.end_byte].decode()
             loc = node.end_point[0] - node.start_point[0] + 1
+            body = node.child_by_field_name("body")
             result.append({
                 "id": f"class:{file_path}:{name}",
                 "type": "class",
@@ -38,6 +39,9 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
                 "lines_of_code": loc,
                 "start_line": node.start_point[0] + 1,
                 "end_line": node.end_point[0] + 1,
+                "cyclomatic_complexity": _cyclomatic_complexity(body) if body else 1,
+                "param_count": 0,
+                "max_nesting": _max_nesting(body) if body else 0,
             })
 
     if node.type == "function_definition":
@@ -59,6 +63,9 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
                 "start_line": node.start_point[0] + 1,
                 "end_line": node.end_point[0] + 1,
                 "calls": calls,
+                "cyclomatic_complexity": _cyclomatic_complexity(body) if body else 1,
+                "param_count": _param_count(node),
+                "max_nesting": _max_nesting(body) if body else 0,
             })
 
     for child in node.children:
@@ -112,3 +119,49 @@ def _extract_imports(node, source: bytes, result: list):
     for child in node.children:
         if node.type not in ("import_from_statement", "import_statement"):
             _extract_imports(child, source, result)
+
+
+def _cyclomatic_complexity(node):
+    """Count decision points in an AST subtree. Base complexity = 1."""
+    DECISION_TYPES = {
+        "if_statement", "elif_clause", "for_statement", "while_statement",
+        "try_statement", "except_clause", "conditional_expression",
+    }
+    count = 1
+    def _walk(n):
+        nonlocal count
+        if n.type in DECISION_TYPES:
+            count += 1
+        if n.type == "boolean_operator":
+            count += 1
+        for child in n.children:
+            _walk(child)
+    _walk(node)
+    return count
+
+
+def _param_count(node):
+    """Count parameters in a function_definition node."""
+    params = node.child_by_field_name("parameters")
+    if not params:
+        return 0
+    count = 0
+    for child in params.children:
+        if child.type in ("identifier", "default_parameter", "typed_parameter",
+                          "typed_default_parameter", "list_splat_pattern",
+                          "dictionary_splat_pattern"):
+            count += 1
+    return count
+
+
+def _max_nesting(node, depth=0):
+    """Compute maximum nesting depth of control structures."""
+    NESTING_TYPES = {
+        "if_statement", "for_statement", "while_statement",
+        "with_statement", "try_statement", "function_definition",
+    }
+    max_depth = depth
+    for child in node.children:
+        child_depth = depth + 1 if child.type in NESTING_TYPES else depth
+        max_depth = max(max_depth, _max_nesting(child, child_depth))
+    return max_depth
