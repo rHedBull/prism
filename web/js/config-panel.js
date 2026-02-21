@@ -60,7 +60,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
     }
 
     // Node type toggles
-    for (const type of ['function', 'class']) {
+    for (const type of ['function', 'class', 'interface', 'type_alias']) {
         const checkbox = document.getElementById(`type-${type}`);
         if (!checkbox) continue;
         checkbox.addEventListener('change', () => {

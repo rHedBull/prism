@@ -1,6 +1,7 @@
 # Data vs Control Separation — Design Document
 
 **Date:** 2026-02-20
+**Updated:** 2026-02-21
 **Status:** Approved
 **Scope:** v1 — node classification and color mode toggle
 
@@ -68,7 +69,7 @@ Extract two new fields on class nodes:
 
 ### TypeScript parser (`typescript_parser.py`)
 
-Distinguish type-like nodes instead of mapping everything to `type: "class"`:
+The parser already detects `interface_declaration` and `type_alias_declaration` separately (since the metrics feature added `cyclomatic_complexity`, `param_count`, `max_nesting` to all nodes). However, it still emits `type: "class"` for all three. Change to emit distinct types:
 
 | AST node type | Emitted `type` field |
 |---------------|---------------------|
@@ -77,8 +78,10 @@ Distinguish type-like nodes instead of mapping everything to `type: "class"`:
 | `class_declaration` | `"class"` |
 
 This is a **schema change** — downstream code that filters on `type === "class"` must also match `"interface"` and `"type_alias"`. Affected files:
-- `web/js/graph-loader.js` — `groupByAbstractionLevel` filters on node type
-- `web/js/layers.js` — no direct type filter, uses whatever graph-loader provides
+- `web/js/graph-loader.js` — `groupByAbstractionLevel` filters on `node.type === 'class'` (line 91)
+- `web/js/config-panel.js` — node type toggles only list `function` and `class`
+- `web/js/metrics.js` — `TYPE_COLORS` map has entries for `function`, `class`, `component`, `container`, `system`
+- `web/index.html` — node type checkboxes only list Functions and Classes
 
 ---
 
@@ -143,32 +146,29 @@ No changes to `edges.json`.
 | control | Warm orange | `#FF7043` |
 | hybrid | Muted slate | `#78909C` |
 
-### Color mode toggle
+### Integration with existing metrics system
 
-New button group in the top bar alongside the Reset View button:
+Since the metrics feature landed, color is already controlled by a dropdown in the config panel (`web/js/metrics.js`). The `role` classification integrates as a new **categorical color metric** — not a separate toggle.
 
-```
-[ Language ] [ Role ]
-```
+**Add `"role"` as a new option in the color dropdown** (`metric-color` select in `index.html`), alongside `language`, `type`, etc.
 
-- **Language** (default): current behavior — Python=amber, TypeScript=cyan, JavaScript=green
-- **Role**: data=teal, control=orange, hybrid=slate
+In `metrics.js`:
+- Add `ROLE_COLORS` map: `{ data: 0x26A69A, control: 0xFF7043, hybrid: 0x78909C }`
+- Add `"role"` to `COLOR_METRICS` array
+- Handle `_colorMetric === 'role'` in `computeColor()` — return `ROLE_COLORS[node.role]`
 
-Implementation:
-- Store `colorMode` state: `"language"` | `"role"`
-- On toggle, iterate all node meshes and tween `material.color` and `material.emissive` to the new color over ~300ms
-- Both the language colors and role colors are looked up from the node data (`node.language` or `node.role`)
-
-### Legend
-
-Small floating element in the bottom-left corner:
-- Shows colored dots with labels for the active color scheme
-- Updates on toggle
-- Matches the info-panel styling (dark, semi-transparent background)
+No separate toggle or legend needed — the existing dropdown and metric infrastructure handles it.
 
 ### Graph loader compatibility
 
-Update `graph-loader.js` to handle the new node types (`"interface"`, `"type_alias"`) alongside `"class"` when building the C4 code layer. Treat all three the same way for layer grouping — they're all code-level entities.
+Update `graph-loader.js` to handle the new node types (`"interface"`, `"type_alias"`) alongside `"class"` when building the C4 code layer (line 91). Treat all three the same way for layer grouping — they're all code-level entities.
+
+### Config panel compatibility
+
+Update node type toggles to include `interface` and `type_alias`:
+- `web/index.html` — add checkboxes for Interfaces and Type Aliases
+- `web/js/config-panel.js` — add toggle handlers for the new types
+- `web/js/metrics.js` — add `interface` and `type_alias` entries to `TYPE_COLORS`
 
 ---
 
@@ -201,7 +201,7 @@ Without the role classification, there's no way to distinguish stream endpoints 
 | `src/callgraph/graph_builder.py` | Add `classify_roles()` pass, call after `build_graph` |
 | `src/callgraph/output.py` | No change — already serializes all node fields |
 | `web/js/graph-loader.js` | Handle new node types in C4 layer grouping |
-| `web/js/layers.js` | Add role color map, color mode toggle logic |
-| `web/js/main.js` | Wire up toggle button, pass color mode state |
-| `web/index.html` | Add toggle buttons and legend container |
+| `web/js/metrics.js` | Add `ROLE_COLORS`, handle `role` in `computeColor()`, add to `COLOR_METRICS` |
+| `web/js/config-panel.js` | Add toggle handlers for `interface` and `type_alias` node types |
+| `web/index.html` | Add `role` to color dropdown, add interface/type_alias checkboxes |
 | `tests/` | Update tests for new fields and classification |

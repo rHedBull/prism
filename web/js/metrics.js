@@ -5,7 +5,7 @@ const LOC_SCALE = 0.08;
 
 // Available metrics for size and color dropdowns
 export const SIZE_METRICS = ['complexity', 'lines_of_code', 'cyclomatic_complexity', 'param_count', 'max_nesting', 'export_count', 'fan_in', 'fan_out', 'coupling', 'instability', 'child_count'];
-export const COLOR_METRICS = ['language', 'type', 'lines_of_code', 'cyclomatic_complexity', 'param_count', 'max_nesting', 'export_count', 'fan_in', 'fan_out', 'coupling', 'instability', 'child_count'];
+export const COLOR_METRICS = ['language', 'type', 'role', 'lines_of_code', 'cyclomatic_complexity', 'param_count', 'max_nesting', 'export_count', 'fan_in', 'fan_out', 'coupling', 'instability', 'child_count'];
 
 const LANGUAGE_COLORS = {
     python: 0x8c60f3,
@@ -18,9 +18,17 @@ const LANGUAGE_COLORS = {
 const TYPE_COLORS = {
     function: 0x4A90D9,   // blue
     class: 0x8c60f3,      // purple
+    interface: 0x26A69A,  // teal
+    type_alias: 0x78909C, // slate
     component: 0x2ECC71,  // green
     container: 0xE67E22,  // orange
     system: 0xE74C3C,     // red
+};
+
+const ROLE_COLORS = {
+    data: 0x26A69A,       // teal green
+    control: 0xFF7043,    // warm orange
+    hybrid: 0x78909C,     // muted slate
 };
 
 // Current selections (module-level state)
@@ -115,6 +123,10 @@ export function computeColor(node, metricRange) {
         return TYPE_COLORS[node.type] || 0x888888;
     }
 
+    if (_colorMetric === 'role') {
+        return ROLE_COLORS[node.role] || 0x888888;
+    }
+
     const value = node[_colorMetric] || 0;
     const { min, max } = metricRange;
     const t = max > min ? (value - min) / (max - min) : 0;
@@ -138,7 +150,7 @@ export function computeColor(node, metricRange) {
  * Compute min/max of the active color metric across a flat list of nodes.
  */
 export function computeMetricRange(allNodes) {
-    if (_colorMetric === 'none' || _colorMetric === 'language' || _colorMetric === 'type') return { min: 0, max: 1 };
+    if (_colorMetric === 'none' || _colorMetric === 'language' || _colorMetric === 'type' || _colorMetric === 'role') return { min: 0, max: 1 };
     let min = Infinity, max = -Infinity;
     for (const node of allNodes) {
         const v = node[_colorMetric] || 0;
