@@ -328,7 +328,7 @@ Custom and automatic node grouping beyond the directory hierarchy.
 | P0 | Highlight Options (multi-select, path) | Medium | Selection system |
 | P1 | Groupings (auto by directory/language) | Medium | Group renderer |
 | P1 | Technologies Used | Low | Dependency parser |
-| P1 | Diff Between Commits | High | Git integration, graph diffing |
+| ~~P1~~ | ~~Diff Between Commits~~ | ~~High~~ | ~~Done~~ — `callgraph diff`, `/prism-diff`, `/prism-impact` |
 | P2 | User / API Journeys | High | Route detection, call chain tracing |
 | P2 | Data vs Control Separation | Medium | Node/edge classifier |
 | P2 | Data Streams | High | Type flow analysis |
