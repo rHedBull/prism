@@ -91,6 +91,7 @@ async function init() {
         if (diff) {
             activateDiffMode(diff, nodeMeshes, edgeMeshes, scene);
             diffShown = true;
+            treePanel.refresh();
             requestRender();
         }
 
@@ -104,6 +105,7 @@ async function init() {
                 activateDiffMode(diff, nodeMeshes, edgeMeshes, scene);
                 diffShown = true;
             }
+            treePanel.refresh();
             requestRender();
         });
 

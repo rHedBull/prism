@@ -2,6 +2,7 @@
  * Side panel with hierarchical tree view, search/filter, and graph sync.
  */
 import * as THREE from 'three';
+import { getDiffState } from './diff-overlay.js';
 
 const TYPE_ICONS = {
     system: '\u25C6',
@@ -146,6 +147,37 @@ export function createTreePanel(graph, layerGroups, nodeMeshes, camera, controls
         badge.textContent = node.type;
         row.appendChild(badge);
 
+        // Diff indicator
+        const { diffActive, addedIds, removedIds, modifiedIds, movedIds } = getDiffState();
+        if (diffActive) {
+            let diffColor = null;
+            let diffLabel = null;
+            if (addedIds.has(nodeId)) { diffColor = '#00E676'; diffLabel = '+'; }
+            else if (removedIds.has(nodeId)) { diffColor = '#FF1744'; diffLabel = '\u2212'; }
+            else if (modifiedIds.has(nodeId)) { diffColor = '#FFD600'; diffLabel = '~'; }
+            else if (movedIds.has(nodeId)) { diffColor = '#448AFF'; diffLabel = '\u2192'; }
+
+            if (diffColor) {
+                // Color the row background
+                row.style.background = `${diffColor}22`;
+                row.style.borderLeft = `3px solid ${diffColor}`;
+                // Color the name
+                nameEl.style.color = diffColor;
+                nameEl.style.fontWeight = 'bold';
+                // Add diff badge
+                const diffBadge = document.createElement('span');
+                diffBadge.className = 'tree-badge';
+                diffBadge.style.background = diffColor;
+                diffBadge.style.color = '#000';
+                diffBadge.style.fontWeight = 'bold';
+                diffBadge.textContent = diffLabel;
+                row.appendChild(diffBadge);
+            } else {
+                // Dim unchanged rows
+                row.style.opacity = '0.4';
+            }
+        }
+
         // Hover: highlight in graph
         row.addEventListener('mouseenter', () => {
             if (window._treePanelHoverCallback) {
@@ -247,6 +279,9 @@ export function createTreePanel(graph, layerGroups, nodeMeshes, camera, controls
         },
         clearSelection() {
             _updateSelection(null);
+        },
+        refresh() {
+            renderTree(searchInput.value);
         },
     };
 }
