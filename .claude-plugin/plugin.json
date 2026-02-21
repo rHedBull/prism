@@ -1,0 +1,6 @@
+{
+  "name": "prism",
+  "version": "0.1.0",
+  "description": "Architecture visualization — diff and impact analysis for codebases",
+  "repository": "https://github.com/hendrik/prism"
+}

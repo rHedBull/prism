@@ -1,5 +1,6 @@
 ---
 description: "Visualize the structural impact of a planned change from a spec or design document"
+argument-hint: "<path-to-spec.md>"
 ---
 
 # /impact — Plan Impact Visualization

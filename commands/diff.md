@@ -1,5 +1,6 @@
 ---
 description: "Compare callgraph structure between git refs and write diff.json for the viewer"
+argument-hint: "<git-ref or ref-a..ref-b>"
 ---
 
 # /diff — Git Graph Comparison
