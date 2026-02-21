@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { highlightEdges, resetEdgeHighlights } from './edges.js';
 import { getLeftOffset, getCanvasWidth, requestRender } from './scene.js';
 import { getDiffState, getDiffHoverInfo } from './diff-overlay.js';
+import { getSizeInfo } from './metrics.js';
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -308,7 +309,10 @@ function showInfoPanel(data) {
     const panel = document.getElementById('info-panel');
     document.getElementById('info-name').textContent = data.name;
     document.getElementById('info-type').textContent = data.type;
-    document.getElementById('info-loc').textContent = data.lines_of_code;
+    const { metric, value } = getSizeInfo(data);
+    const sizeLabel = document.getElementById('info-loc-label');
+    if (sizeLabel) sizeLabel.textContent = metric.replace(/_/g, ' ') + ': ';
+    document.getElementById('info-loc').textContent = value;
     document.getElementById('info-lang').textContent = data.language || '—';
     document.getElementById('info-path').textContent = data.file_path;
 
