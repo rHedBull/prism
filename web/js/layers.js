@@ -1,18 +1,11 @@
 import * as THREE from 'three';
+import { computeHeight, computeColor, computeMetricRange } from './metrics.js';
 
 const LAYER_COLORS = {
     0: 0x4A90D9, // C4 Code — blue
     1: 0x8c60f3, // C3 Component — vivid purple
     2: 0x2ECC71, // C2 Container — green
     3: 0xE74C3C, // C1 Context — red
-};
-
-const LANGUAGE_COLORS = {
-    python: 0x8c60f3,       // vivid purple
-    typescript: 0x6a3fd4,    // deep purple
-    typescriptreact: 0x6a3fd4,
-    javascript: 0xb89ef7,    // light purple
-    javascriptreact: 0xb89ef7,
 };
 
 const LAYER_LABELS = {
@@ -23,7 +16,6 @@ const LAYER_LABELS = {
 };
 
 const LAYER_SPACING = 12;
-const LOC_SCALE = 0.08;
 export const LAYER_SIZE = 50;
 
 export async function createLayers(layerGroups, edges, scene, onProgress) {
@@ -33,6 +25,10 @@ export async function createLayers(layerGroups, edges, scene, onProgress) {
 
     // Track bounding boxes: nodeId -> { cx, cz, w, d } (center + dimensions)
     const nodeBounds = {};
+
+    // Compute metric range for color mapping
+    const allNodes = Object.values(layerGroups).flat();
+    const metricRange = computeMetricRange(allNodes);
 
     // Process layers top-down: C1 (3) -> C2 (2) -> C3 (1) -> C4 (0)
     const levels = [3, 2, 1, 0];
@@ -107,8 +103,7 @@ export async function createLayers(layerGroups, edges, scene, onProgress) {
                 // Store this node's bounding box for the next layer down
                 nodeBounds[node.id] = box;
 
-                // Block height: log-scaled LOC
-                const height = Math.max(0.8, Math.log2(Math.max(1, node.lines_of_code)) * LOC_SCALE * 8);
+                const height = computeHeight(node);
 
                 // Block size: smaller fraction of allocated box, capped per level
                 const maxSize = level === 3 ? 20 : level === 2 ? 10 : level === 1 ? 4 : 2;
@@ -117,7 +112,7 @@ export async function createLayers(layerGroups, edges, scene, onProgress) {
                 const blockD = Math.min(maxSize, Math.max(0.5, box.d * fillRatio));
 
                 const geo = new THREE.BoxGeometry(blockW, height, blockD);
-                const color = LANGUAGE_COLORS[node.language] || 0x888888;
+                const color = computeColor(node, metricRange);
                 const mat = new THREE.MeshPhongMaterial({
                     color,
                     emissive: color,

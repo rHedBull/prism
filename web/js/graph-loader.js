@@ -1,3 +1,5 @@
+import { computeDerivedMetrics } from './metrics.js';
+
 export async function loadGraph(basePath = '.') {
     const [nodesRes, edgesRes] = await Promise.all([
         fetch(`${basePath}/.callgraph/nodes.json`),
@@ -8,7 +10,7 @@ export async function loadGraph(basePath = '.') {
     return { nodes, edges };
 }
 
-export function groupByAbstractionLevel(nodes) {
+export function groupByAbstractionLevel(nodes, edges = []) {
     const layers = {};
     const fileNodes = nodes.filter(n => n.type === 'file');
     const dirNodes = nodes.filter(n => n.type === 'directory');
@@ -95,6 +97,10 @@ export function groupByAbstractionLevel(nodes) {
             });
         }
     }
+
+    // Compute derived metrics on all layer nodes
+    const allNodes = Object.values(layers).flat();
+    computeDerivedMetrics(allNodes, edges);
 
     return layers;
 }
