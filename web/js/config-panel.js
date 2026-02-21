@@ -55,7 +55,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
                 if (nodeLevel === level) mesh.visible = visible;
             }
             updateEdgeVisibility();
-            requestRender('config');
+            reapplyMetrics();
         });
     }
 
@@ -69,7 +69,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
                 if (data.type === type) mesh.visible = visible;
             }
             updateEdgeVisibility();
-            requestRender('config');
+            reapplyMetrics();
         });
     }
 
@@ -93,16 +93,21 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
                 if (data.language === lang) mesh.visible = visible;
             }
             updateEdgeVisibility();
-            requestRender('config');
+            reapplyMetrics();
         });
     }
 
-    // Metric dropdowns
+    // Metric dropdowns — recompute sizes and colors relative to visible blocks
     function reapplyMetrics() {
-        const metricRange = computeMetricRange(
-            Array.from(nodeDataMap.values())
-        );
+        const visibleNodes = [];
         for (const [mesh, data] of nodeDataMap) {
+            if (mesh.visible) visibleNodes.push(data);
+        }
+        const metricRange = computeMetricRange(visibleNodes.length > 0 ? visibleNodes : Array.from(nodeDataMap.values()));
+
+        for (const [mesh, data] of nodeDataMap) {
+            if (!mesh.visible) continue;
+
             // Update height
             const newHeight = computeHeight(data);
             const oldHeight = mesh.geometry.parameters.height;
