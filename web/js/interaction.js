@@ -146,14 +146,14 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
             const mesh = intersects[0].object;
             if (mesh !== hoveredMesh) {
                 if (hoveredMesh) {
-                    hoveredMesh.material.emissive.setHex(0x000000);
+                    if (hoveredMesh.material.emissive) hoveredMesh.material.emissive.setHex(0x000000);
                     resetEdgeHighlights(edgeMeshes);
                     resetNodeOpacity(nodeMeshes);
                     clearSpotlights();
                 }
 
                 hoveredMesh = mesh;
-                mesh.material.emissive.setHex(0x222222);
+                if (mesh.material.emissive) mesh.material.emissive.setHex(0x222222);
 
                 hoverFromTree = false;
                 const data = nodeDataMap.get(mesh);
@@ -166,13 +166,22 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                 const ancestors = getAncestors(data.id);
                 const family = new Set([data.id, ...descendants, ...ancestors]);
 
+                const { diffActive: _da, addedIds: _ai, removedIds: _ri, modifiedIds: _mi, movedIds: _moi } = getDiffState();
                 for (const [id, m] of Object.entries(nodeMeshes)) {
+                    const isDiffNode = _da && (_ai.has(id) || _ri.has(id) || _mi.has(id) || _moi.has(id));
+                    if (isDiffNode) continue; // don't touch diff-colored nodes
                     if (family.has(id)) {
                         m.material.color.setHex(m.userData._origColor);
                         m.material.emissiveIntensity = descendants.has(id) ? 0.5 : 0.15;
+                        m.material.opacity = _da ? 0.6 : 1.0;
                     } else {
-                        m.material.color.setHex(0xd8d6dc);
-                        m.material.emissiveIntensity = 0.0;
+                        if (_da) {
+                            m.material.opacity = 0.05;
+                            m.material.emissiveIntensity = 0.0;
+                        } else {
+                            m.material.color.setHex(0xd8d6dc);
+                            m.material.emissiveIntensity = 0.0;
+                        }
                     }
                 }
 
@@ -187,7 +196,7 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                 requestRender();
             }
         } else if (hoveredMesh && !hoverFromTree) {
-            hoveredMesh.material.emissiveIntensity = 0.15;
+            if (hoveredMesh.material.emissiveIntensity !== undefined) hoveredMesh.material.emissiveIntensity = 0.15;
             hoveredMesh = null;
             infoPanel.style.display = 'none';
             resetEdgeHighlights(edgeMeshes);
@@ -236,7 +245,7 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         if (!mesh) return;
 
         if (hoveredMesh) {
-            hoveredMesh.material.emissive.setHex(0x000000);
+            if (hoveredMesh.material.emissive) hoveredMesh.material.emissive.setHex(0x000000);
             resetEdgeHighlights(edgeMeshes);
             resetNodeOpacity(nodeMeshes);
             clearSpotlights();
@@ -244,7 +253,7 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
 
         hoverFromTree = true;
         hoveredMesh = mesh;
-        mesh.material.emissive.setHex(0x222222);
+        if (mesh.material.emissive) mesh.material.emissive.setHex(0x222222);
 
         const data = nodeDataMap.get(mesh);
         showInfoPanel(data);
@@ -254,13 +263,22 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         const ancestors = getAncestors(data.id);
         const family = new Set([data.id, ...descendants, ...ancestors]);
 
+        const { diffActive: _da2, addedIds: _ai2, removedIds: _ri2, modifiedIds: _mi2, movedIds: _moi2 } = getDiffState();
         for (const [id, m] of Object.entries(nodeMeshes)) {
+            const isDiffNode = _da2 && (_ai2.has(id) || _ri2.has(id) || _mi2.has(id) || _moi2.has(id));
+            if (isDiffNode) continue;
             if (family.has(id)) {
                 m.material.color.setHex(m.userData._origColor);
                 m.material.emissiveIntensity = descendants.has(id) ? 0.5 : 0.15;
+                m.material.opacity = _da2 ? 0.6 : 1.0;
             } else {
-                m.material.color.setHex(0xd8d6dc);
-                m.material.emissiveIntensity = 0.0;
+                if (_da2) {
+                    m.material.opacity = 0.05;
+                    m.material.emissiveIntensity = 0.0;
+                } else {
+                    m.material.color.setHex(0xd8d6dc);
+                    m.material.emissiveIntensity = 0.0;
+                }
             }
         }
 
@@ -274,7 +292,7 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
 
     window._treePanelLeaveCallback = () => {
         if (hoveredMesh && hoverFromTree) {
-            hoveredMesh.material.emissiveIntensity = 0.15;
+            if (hoveredMesh.material.emissiveIntensity !== undefined) hoveredMesh.material.emissiveIntensity = 0.15;
             hoveredMesh = null;
             hoverFromTree = false;
             infoPanel.style.display = 'none';
@@ -320,8 +338,20 @@ function showInfoPanel(data) {
 }
 
 function resetNodeOpacity(nodeMeshes) {
+    const { diffActive, addedIds, removedIds, modifiedIds, movedIds } = getDiffState();
     for (const [id, mesh] of Object.entries(nodeMeshes)) {
-        mesh.material.color.setHex(mesh.userData._origColor);
-        mesh.material.emissiveIntensity = 0.15;
+        if (diffActive) {
+            const isChanged = addedIds.has(id) || removedIds.has(id) || modifiedIds.has(id) || movedIds.has(id);
+            if (isChanged) {
+                // Don't touch diff-colored nodes — they use BasicMaterial
+                continue;
+            } else {
+                mesh.material.opacity = 0.08;
+                mesh.material.emissiveIntensity = 0.02;
+            }
+        } else {
+            mesh.material.color.setHex(mesh.userData._origColor);
+            mesh.material.emissiveIntensity = 0.15;
+        }
     }
 }

@@ -1,8 +1,15 @@
-"""Graph diff engine — compares two graph snapshots and produces a C3+ structural diff."""
+"""Graph diff engine — compares two graph snapshots and produces a structural diff.
+
+Cascading rules:
+  - Removing a parent cascades removal to all descendants.
+  - Adding a child under an existing parent marks the parent as modified.
+  - Removing a child from an existing parent marks the parent as modified.
+  - Each node appears in exactly one category (added > removed > moved > modified).
+"""
 
 
 def compute_diff(graph_a: dict, graph_b: dict, meta: dict | None = None) -> dict:
-    """Compare two graph snapshots and return structural diff filtered to C3+ nodes.
+    """Compare two graph snapshots and return structural diff.
 
     Args:
         graph_a: Base graph with 'nodes' and 'edges' lists.
@@ -15,66 +22,102 @@ def compute_diff(graph_a: dict, graph_b: dict, meta: dict | None = None) -> dict
     nodes_a = {n["id"]: n for n in graph_a["nodes"]}
     nodes_b = {n["id"]: n for n in graph_b["nodes"]}
 
-    # Filter to C3+ (abstraction_level >= 1)
-    filtered_a = {k: v for k, v in nodes_a.items() if v.get("abstraction_level", 0) >= 1}
-    filtered_b = {k: v for k, v in nodes_b.items() if v.get("abstraction_level", 0) >= 1}
+    ids_a = set(nodes_a.keys())
+    ids_b = set(nodes_b.keys())
 
-    ids_a = set(filtered_a.keys())
-    ids_b = set(filtered_b.keys())
+    # --- Build parent->children maps for cascading ---
+    children_a = _build_children_map(graph_a["nodes"])
+    children_b = _build_children_map(graph_b["nodes"])
 
-    # Straight added/removed
-    purely_added_ids = ids_b - ids_a
-    purely_removed_ids = ids_a - ids_b
+    # --- Raw added/removed ---
+    raw_added_ids = ids_b - ids_a
+    raw_removed_ids = ids_a - ids_b
 
-    # Move detection: removed node with same name appears at different path
+    # --- Cascade removals: if a node is removed, all its descendants are too ---
+    cascaded_removed = set()
+    for rid in raw_removed_ids:
+        cascaded_removed.add(rid)
+        cascaded_removed.update(_get_descendants(rid, children_a))
+    # Only keep IDs that were actually in graph_a
+    cascaded_removed &= ids_a
+
+    # --- Cascade additions: if a node is added, all its descendants are too ---
+    cascaded_added = set()
+    for aid in raw_added_ids:
+        cascaded_added.add(aid)
+        cascaded_added.update(_get_descendants(aid, children_b))
+    cascaded_added &= ids_b
+
+    # --- Move detection: removed + added with same name ---
     moved_nodes = []
-    remaining_added = set(purely_added_ids)
-    remaining_removed = set(purely_removed_ids)
+    remaining_added = set(cascaded_added)
+    remaining_removed = set(cascaded_removed)
 
     removed_by_name = {}
-    for rid in purely_removed_ids:
-        name = filtered_a[rid]["name"]
+    for rid in cascaded_removed:
+        name = nodes_a[rid]["name"]
         removed_by_name.setdefault(name, []).append(rid)
 
-    for aid in purely_added_ids:
-        name = filtered_b[aid]["name"]
+    for aid in sorted(cascaded_added):
+        name = nodes_b[aid]["name"]
         if name in removed_by_name and removed_by_name[name]:
             rid = removed_by_name[name].pop(0)
             moved_nodes.append({
                 "id": aid,
                 "old_id": rid,
                 "name": name,
-                "old_file_path": filtered_a[rid].get("file_path"),
-                "new_file_path": filtered_b[aid].get("file_path"),
-                "abstraction_level": filtered_b[aid].get("abstraction_level", 0),
+                "old_file_path": nodes_a[rid].get("file_path"),
+                "new_file_path": nodes_b[aid].get("file_path"),
+                "abstraction_level": nodes_b[aid].get("abstraction_level", 0),
             })
             remaining_added.discard(aid)
             remaining_removed.discard(rid)
 
-    added_nodes = [_node_summary(filtered_b[nid]) for nid in sorted(remaining_added)]
-    removed_nodes = [_node_summary(filtered_a[nid]) for nid in sorted(remaining_removed)]
+    added_nodes = [_node_summary(nodes_b[nid]) for nid in sorted(remaining_added)]
+    removed_nodes = [_node_summary(nodes_a[nid]) for nid in sorted(remaining_removed)]
 
-    # Modified detection: same id, different properties
-    common_ids = ids_a & ids_b
+    # --- Modified detection: same id, different properties ---
+    already_categorized = remaining_added | remaining_removed | {m["id"] for m in moved_nodes} | {m.get("old_id") for m in moved_nodes}
+    common_ids = (ids_a & ids_b) - already_categorized
     modified_nodes = []
     for nid in sorted(common_ids):
-        changes = _detect_changes(filtered_a[nid], filtered_b[nid])
+        changes = _detect_changes(nodes_a[nid], nodes_b[nid])
         if changes:
             modified_nodes.append({"id": nid, "changes": changes})
 
-    # Edge matching by (from, to, type) tuple
+    # --- Bubble modifications upward ---
+    # If a child is added/removed/modified, mark its existing parent as modified
+    modified_ids = {m["id"] for m in modified_nodes}
+    all_changed_ids = remaining_added | remaining_removed | modified_ids | {m["id"] for m in moved_nodes}
+
+    for cid in list(all_changed_ids):
+        # Walk up parent chain in whichever graph the node exists in
+        node = nodes_b.get(cid) or nodes_a.get(cid)
+        if not node:
+            continue
+        pid = node.get("parent")
+        while pid:
+            if pid in already_categorized or pid in modified_ids:
+                break
+            # Parent exists in both graphs and isn't already changed
+            if pid in ids_a and pid in ids_b and pid not in all_changed_ids:
+                modified_ids.add(pid)
+                modified_nodes.append({
+                    "id": pid,
+                    "changes": {"children_changed": [True, True]},
+                })
+                all_changed_ids.add(pid)
+            parent_node = nodes_b.get(pid) or nodes_a.get(pid)
+            pid = parent_node.get("parent") if parent_node else None
+
+    # --- Edge diff ---
     edges_a = {(e["from"], e["to"], e["type"]) for e in graph_a["edges"]}
     edges_b = {(e["from"], e["to"], e["type"]) for e in graph_b["edges"]}
 
-    # Filter edges to only those connecting C3+ nodes
-    all_c3_ids = set(filtered_a.keys()) | set(filtered_b.keys())
-    edges_a_filtered = {e for e in edges_a if e[0] in all_c3_ids and e[1] in all_c3_ids}
-    edges_b_filtered = {e for e in edges_b if e[0] in all_c3_ids and e[1] in all_c3_ids}
+    added_edges = [{"from": e[0], "to": e[1], "type": e[2]} for e in sorted(edges_b - edges_a)]
+    removed_edges = [{"from": e[0], "to": e[1], "type": e[2]} for e in sorted(edges_a - edges_b)]
 
-    added_edges = [{"from": e[0], "to": e[1], "type": e[2]} for e in sorted(edges_b_filtered - edges_a_filtered)]
-    removed_edges = [{"from": e[0], "to": e[1], "type": e[2]} for e in sorted(edges_a_filtered - edges_b_filtered)]
-
-    result = {
+    return {
         "meta": meta or {},
         "summary": {
             "added_nodes": len(added_nodes),
@@ -91,6 +134,27 @@ def compute_diff(graph_a: dict, graph_b: dict, meta: dict | None = None) -> dict
         "added_edges": added_edges,
         "removed_edges": removed_edges,
     }
+
+
+def _build_children_map(nodes: list) -> dict:
+    """Build parent_id -> [child_ids] map."""
+    children = {}
+    for n in nodes:
+        pid = n.get("parent")
+        if pid:
+            children.setdefault(pid, []).append(n["id"])
+    return children
+
+
+def _get_descendants(node_id: str, children_map: dict) -> set:
+    """Get all descendants of a node recursively."""
+    result = set()
+    stack = list(children_map.get(node_id, []))
+    while stack:
+        cid = stack.pop()
+        if cid not in result:
+            result.add(cid)
+            stack.extend(children_map.get(cid, []))
     return result
 
 

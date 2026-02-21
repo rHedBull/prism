@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { createScene, initRenderer, animateCamera, requestRender, panelState } from './scene.js';
-import { loadGraph, groupByAbstractionLevel, loadDiff } from './graph-loader.js';
+import { loadGraph, groupByAbstractionLevel } from './graph-loader.js';
 import { createLayers, LAYER_SIZE } from './layers.js';
 import { createEdges } from './edges.js';
 import { setupInteraction } from './interaction.js';
 import { createTreePanel } from './tree-panel.js';
 import { initConfigPanel } from './config-panel.js';
-import { activateDiffMode, deactivateDiffMode } from './diff-overlay.js';
+import { activateDiffMode, deactivateDiffMode, loadDiff } from './diff-overlay.js';
 
 const { scene, camera, renderer, controls, resizeCanvas } = createScene();
 
@@ -85,16 +85,25 @@ async function init() {
         // Init config panel with mesh references
         initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap);
 
-        // Check for diff.json and activate diff mode if present
+        // Check for diff.json and set up toggle
         const diff = await loadDiff('.');
+        let diffShown = false;
         if (diff) {
             activateDiffMode(diff, nodeMeshes, edgeMeshes, scene);
+            diffShown = true;
             requestRender();
         }
 
-        // Wire up Clear Diff button
-        document.getElementById('btn-clear-diff').addEventListener('click', () => {
-            deactivateDiffMode(nodeMeshes, edgeMeshes);
+        // Wire up Diff toggle button
+        document.getElementById('btn-toggle-diff').addEventListener('click', () => {
+            if (!diff) return;
+            if (diffShown) {
+                deactivateDiffMode(nodeMeshes, edgeMeshes, scene);
+                diffShown = false;
+            } else {
+                activateDiffMode(diff, nodeMeshes, edgeMeshes, scene);
+                diffShown = true;
+            }
             requestRender();
         });
 
