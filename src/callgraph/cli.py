@@ -19,6 +19,40 @@ def cmd_build(args):
     print(f"  {len(graph['edges'])} edges")
 
 
+def cmd_diff(args):
+    """Compare two graph directories and write diff.json."""
+    import json
+    from callgraph.graph_diff import compute_diff
+
+    dir_a = Path(args.graph_a) / ".callgraph"
+    dir_b = Path(args.graph_b) / ".callgraph"
+
+    graph_a = {
+        "nodes": json.loads((dir_a / "nodes.json").read_text()),
+        "edges": json.loads((dir_a / "edges.json").read_text()),
+    }
+    graph_b = {
+        "nodes": json.loads((dir_b / "nodes.json").read_text()),
+        "edges": json.loads((dir_b / "edges.json").read_text()),
+    }
+
+    meta = {
+        "source": "commits",
+        "ref_a": getattr(args, "ref_a", "unknown"),
+        "ref_b": getattr(args, "ref_b", "unknown"),
+    }
+    diff = compute_diff(graph_a, graph_b, meta)
+
+    out = Path(args.output)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "diff.json").write_text(json.dumps(diff, indent=2))
+
+    s = diff["summary"]
+    print(f"Diff written to {out}/diff.json")
+    print(f"  +{s['added_nodes']} added, -{s['removed_nodes']} removed, "
+          f"~{s['modified_nodes']} modified, >{s['moved_nodes']} moved")
+
+
 def cmd_serve(args):
     import shutil
     port = args.port
@@ -50,10 +84,20 @@ def main():
     serve_parser = subparsers.add_parser("serve", help="Start the web visualizer")
     serve_parser.add_argument("-p", "--port", type=int, default=8080, help="Port to serve on")
 
+    # diff subcommand
+    diff_parser = subparsers.add_parser("diff", help="Compare two graph directories")
+    diff_parser.add_argument("graph_a", help="Path to first codebase (with .callgraph/)")
+    diff_parser.add_argument("graph_b", help="Path to second codebase (with .callgraph/)")
+    diff_parser.add_argument("-o", "--output", default=".callgraph", help="Output directory for diff.json")
+    diff_parser.add_argument("--ref-a", default="unknown", help="Label for graph_a")
+    diff_parser.add_argument("--ref-b", default="unknown", help="Label for graph_b")
+
     args = parser.parse_args()
 
     if args.command == "build":
         cmd_build(args)
+    elif args.command == "diff":
+        cmd_diff(args)
     elif args.command == "serve":
         cmd_serve(args)
     else:
