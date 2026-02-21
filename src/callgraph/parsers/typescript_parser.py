@@ -88,6 +88,9 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
                         "lines_of_code": loc,
                         "start_line": child.start_point[0] + 1,
                         "end_line": child.end_point[0] + 1,
+                        "cyclomatic_complexity": 1,
+                        "param_count": 0,
+                        "max_nesting": 0,
                     })
 
     # Interfaces and type aliases
@@ -104,6 +107,9 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
                 "lines_of_code": loc,
                 "start_line": node.start_point[0] + 1,
                 "end_line": node.end_point[0] + 1,
+                "cyclomatic_complexity": 1,
+                "param_count": 0,
+                "max_nesting": 0,
             })
 
     # Class declarations
@@ -120,6 +126,9 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
                 "lines_of_code": loc,
                 "start_line": node.start_point[0] + 1,
                 "end_line": node.end_point[0] + 1,
+                "cyclomatic_complexity": 1,
+                "param_count": 0,
+                "max_nesting": 0,
             })
 
     for child in node.children:
@@ -139,6 +148,7 @@ def _add_function_node(name_node, scope_node, file_path, source, result, body_no
     if body_node:
         _extract_calls(body_node, source, calls)
 
+    param_source = body_node if body_node and body_node.type == "arrow_function" else scope_node
     result.append({
         "id": f"func:{file_path}:{name}",
         "type": "function",
@@ -148,6 +158,9 @@ def _add_function_node(name_node, scope_node, file_path, source, result, body_no
         "start_line": scope_node.start_point[0] + 1,
         "end_line": scope_node.end_point[0] + 1,
         "calls": calls,
+        "cyclomatic_complexity": _cyclomatic_complexity(body_node) if body_node else 1,
+        "param_count": _param_count(param_source),
+        "max_nesting": _max_nesting(body_node) if body_node else 0,
     })
 
 def _extract_calls(node, source: bytes, result: list):
@@ -190,3 +203,59 @@ def _extract_imports(node, source: bytes, result: list):
     for child in node.children:
         if node.type != "import_statement":
             _extract_imports(child, source, result)
+
+
+def _cyclomatic_complexity(node):
+    """Count decision points in an AST subtree. Base complexity = 1."""
+    DECISION_TYPES = {
+        "if_statement", "switch_case", "for_statement", "for_in_statement",
+        "while_statement", "do_statement", "catch_clause", "ternary_expression",
+    }
+    count = 1
+    def _walk(n):
+        nonlocal count
+        if n.type in DECISION_TYPES:
+            count += 1
+        if n.type == "binary_expression":
+            # Check for && or || operators
+            if len(n.children) > 1:
+                op_node = n.children[1]
+                op_text = n.text[op_node.start_byte - n.start_byte:op_node.end_byte - n.start_byte]
+                if op_text in (b'&&', b'||'):
+                    count += 1
+        for child in n.children:
+            _walk(child)
+    _walk(node)
+    return count
+
+
+def _param_count(node):
+    """Count parameters of a function/arrow function node."""
+    params = node.child_by_field_name("parameters")
+    if not params:
+        for child in node.children:
+            if child.type == "formal_parameters":
+                params = child
+                break
+    if not params:
+        return 0
+    count = 0
+    for child in params.children:
+        if child.type in ("required_parameter", "optional_parameter",
+                          "rest_parameter", "identifier", "assignment_pattern"):
+            count += 1
+    return count
+
+
+def _max_nesting(node, depth=0):
+    """Compute maximum nesting depth of control structures."""
+    NESTING_TYPES = {
+        "if_statement", "for_statement", "for_in_statement",
+        "while_statement", "do_statement", "try_statement",
+        "switch_statement", "arrow_function", "function_declaration",
+    }
+    max_depth = depth
+    for child in node.children:
+        child_depth = depth + 1 if child.type in NESTING_TYPES else depth
+        max_depth = max(max_depth, _max_nesting(child, child_depth))
+    return max_depth
