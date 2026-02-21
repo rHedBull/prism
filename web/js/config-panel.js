@@ -107,6 +107,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
 
         for (const [mesh, data] of nodeDataMap) {
             if (!mesh.visible) continue;
+            if (!mesh.geometry || !mesh.geometry.parameters) continue;
 
             // Update height
             const newHeight = computeHeight(data);
@@ -123,8 +124,9 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
 
             // Update color
             const newColor = computeColor(data, metricRange);
+            if (!mesh.material || !mesh.material.color) continue;
             mesh.material.color.setHex(newColor);
-            mesh.material.emissive.setHex(newColor);
+            if (mesh.material.emissive) mesh.material.emissive.setHex(newColor);
             mesh.material.emissiveIntensity = 0.15;
             mesh.userData._origColor = newColor;
         }
