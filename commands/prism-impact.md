@@ -41,10 +41,10 @@ The user provides a path to a spec document:
    - For each removal: `{"op": "remove", "id": "<existing-node-id>"}`
    - For each move: `{"op": "move", "id": "<existing-node-id>", "to_layer": "C2|C3"}`
 
-   **Layer mapping:**
-   - C1 (level 3) = System context (rare to add)
-   - C2 (level 2) = Services, top-level directories
-   - C3 (level 1) = Components, leaf directories, individual files
+   **Layer mapping (semantic C4):**
+   - C1 (level 3) = System — product boundary (rare to add)
+   - C2 (level 2) = Container — deployable runtime unit (separate process, own deploy pipeline, scales independently)
+   - C3 (level 1) = Component — replaceable module inside a container (clear interface, single responsibility)
 
    **Important:** Match node IDs to existing graph nodes. Node IDs follow the pattern:
    - `dir:<path>` for directories (e.g. `dir:auth-service`, `dir:auth-service/services`)

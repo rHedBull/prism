@@ -3,6 +3,13 @@ import functools
 import http.server
 from pathlib import Path
 
+from callgraph.architecture import (
+    build_level_map,
+    detect_containers,
+    load_architecture_config,
+    merge_architecture_config,
+    write_architecture_config,
+)
 from callgraph.graph_builder import build_graph
 from callgraph.output import write_graph
 
@@ -11,7 +18,18 @@ def cmd_build(args):
     root = Path(args.path).resolve()
     print(f"Analyzing {root}...")
 
-    graph = build_graph(root)
+    # Detect containers and build architecture config
+    detected = detect_containers(root)
+    existing = load_architecture_config(args.output)
+    config = merge_architecture_config(existing, detected)
+    write_architecture_config(config, args.output)
+    level_map = build_level_map(config)
+
+    containers = [c for c in config.get("containers", [])]
+    if containers:
+        print(f"  {len(containers)} containers detected")
+
+    graph = build_graph(root, level_map=level_map)
     write_graph(graph, args.output)
 
     print(f"Graph written to {args.output}/")

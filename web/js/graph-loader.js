@@ -15,31 +15,61 @@ export function groupByAbstractionLevel(nodes, edges = []) {
     const fileNodes = nodes.filter(n => n.type === 'file');
     const dirNodes = nodes.filter(n => n.type === 'directory');
 
-    // C1 (level 3): system context — one block for the whole codebase
-    const totalLoc = fileNodes.reduce((sum, f) => sum + (f.lines_of_code || 0), 0);
-    const totalExports = fileNodes.reduce((sum, f) => sum + (f.export_count || 0), 0);
-    const systemNode = {
-        id: 'system:root',
-        type: 'system',
-        name: _inferProjectName(fileNodes),
-        file_path: '.',
-        language: null,
-        lines_of_code: totalLoc,
-        export_count: totalExports,
-        abstraction_level: 3,
-        _layerParent: null,
-    };
-    layers[3] = [systemNode];
+    // C1 (level 3): system context — from data or synthetic fallback
+    const systemDirs = dirNodes.filter(d => d.abstraction_level === 3);
+    layers[3] = [];
+    if (systemDirs.length > 0) {
+        // Systems defined in architecture.yaml
+        for (const dir of systemDirs) {
+            const allFiles = _getAllFilesUnder(dir, fileNodes);
+            const cLoc = allFiles.reduce((sum, f) => sum + (f.lines_of_code || 0), 0);
+            const cExports = allFiles.reduce((sum, f) => sum + (f.export_count || 0), 0);
+            layers[3].push({
+                id: dir.id,
+                type: 'system',
+                name: dir.name,
+                file_path: dir.file_path,
+                language: null,
+                lines_of_code: cLoc,
+                export_count: cExports,
+                abstraction_level: 3,
+                _layerParent: null,
+            });
+        }
+    } else {
+        // Fallback: one synthetic system for the whole codebase
+        const totalLoc = fileNodes.reduce((sum, f) => sum + (f.lines_of_code || 0), 0);
+        const totalExports = fileNodes.reduce((sum, f) => sum + (f.export_count || 0), 0);
+        layers[3].push({
+            id: 'system:root',
+            type: 'system',
+            name: _inferProjectName(fileNodes),
+            file_path: '.',
+            language: null,
+            lines_of_code: totalLoc,
+            export_count: totalExports,
+            abstraction_level: 3,
+            _layerParent: null,
+        });
+    }
 
-    // C2 (level 2): containers — one block per top-level directory
-    const topDirs = dirNodes.filter(d => !d.parent);
+    // C2 (level 2): containers — dirs with abstraction_level === 2
+    const containerDirs = dirNodes.filter(d => d.abstraction_level === 2);
+    // Fallback: if no containers detected, use top-level dirs (backward compat)
+    const useDepthFallback = containerDirs.length === 0;
+    const c2Dirs = useDepthFallback ? dirNodes.filter(d => !d.parent) : containerDirs;
+
     layers[2] = [];
-    for (const dir of topDirs) {
-        const allFiles = fileNodes.filter(f => f.file_path.startsWith(dir.file_path + '/') || f.parent === dir.id);
+    for (const dir of c2Dirs) {
+        const allFiles = _getAllFilesUnder(dir, fileNodes);
         if (allFiles.length === 0) continue;
         const cLoc = allFiles.reduce((sum, f) => sum + (f.lines_of_code || 0), 0);
         const cExports = allFiles.reduce((sum, f) => sum + (f.export_count || 0), 0);
         const languages = [...new Set(allFiles.map(f => f.language).filter(Boolean))];
+        // Find parent system if multiple systems exist
+        const parentSystem = layers[3].length > 1
+            ? _findSystemAncestor(dir, layers[3], dirNodes)
+            : layers[3][0];
         layers[2].push({
             id: dir.id,
             type: 'container',
@@ -49,22 +79,22 @@ export function groupByAbstractionLevel(nodes, edges = []) {
             lines_of_code: cLoc,
             export_count: cExports,
             abstraction_level: 2,
-            _layerParent: systemNode.id,
+            _layerParent: parentSystem ? parentSystem.id : null,
         });
     }
 
-    // C3 (level 1): components — one block per leaf directory
-    const leafDirs = _getLeafDirs(dirNodes);
+    // C3 (level 1): components — leaf dirs with abstraction_level === 1
+    const c1Dirs = useDepthFallback
+        ? _getLeafDirs(dirNodes)
+        : _getLeafAmong(dirNodes.filter(d => d.abstraction_level === 1));
     layers[1] = [];
-    for (const dir of leafDirs) {
+    for (const dir of c1Dirs) {
         const children = fileNodes.filter(f => f.parent === dir.id);
         if (children.length === 0) continue;
         const cLoc = children.reduce((sum, f) => sum + (f.lines_of_code || 0), 0);
         const cExports = children.reduce((sum, f) => sum + (f.export_count || 0), 0);
         const languages = [...new Set(children.map(f => f.language).filter(Boolean))];
-        // Find which C2 container this component belongs to
-        const topDir = dir.file_path.split('/')[0];
-        const parentContainer = layers[2].find(c => c.file_path === topDir);
+        const parentContainer = _findContainerAncestor(dir, layers[2], dirNodes);
         layers[1].push({
             id: dir.id,
             type: 'component',
@@ -74,7 +104,7 @@ export function groupByAbstractionLevel(nodes, edges = []) {
             lines_of_code: cLoc,
             export_count: cExports,
             abstraction_level: 1,
-            _layerParent: parentContainer ? parentContainer.id : systemNode.id,
+            _layerParent: parentContainer ? parentContainer.id : (layers[3][0] ? layers[3][0].id : null),
             _childFileIds: new Set(children.map(f => f.id)),
         });
     }
@@ -121,4 +151,55 @@ function _inferProjectName(fileNodes) {
     const first = fileNodes[0].file_path;
     const root = first.split('/')[0];
     return root || 'system';
+}
+
+function _getAllFilesUnder(dir, fileNodes) {
+    return fileNodes.filter(f =>
+        f.file_path.startsWith(dir.file_path + '/') || f.parent === dir.id
+    );
+}
+
+function _getLeafAmong(dirs) {
+    const dirPaths = new Set(dirs.map(d => d.file_path));
+    return dirs.filter(d => {
+        // A dir is a leaf if no other dir in the set is a child of it
+        for (const other of dirPaths) {
+            if (other !== d.file_path && other.startsWith(d.file_path + '/')) {
+                return false;
+            }
+        }
+        return true;
+    });
+}
+
+function _findSystemAncestor(dir, systems, allDirs) {
+    // Walk up parent chain to find nearest system (level 3)
+    const dirById = new Map(allDirs.map(d => [d.id, d]));
+    const systemIds = new Set(systems.map(s => s.id));
+    let current = dir;
+    while (current && current.parent) {
+        if (systemIds.has(current.parent)) {
+            return systems.find(s => s.id === current.parent);
+        }
+        current = dirById.get(current.parent);
+    }
+    // Fallback: match by path prefix
+    const sorted = [...systems].sort((a, b) => b.file_path.length - a.file_path.length);
+    return sorted.find(s => dir.file_path.startsWith(s.file_path + '/')) || systems[0] || null;
+}
+
+function _findContainerAncestor(dir, containers, allDirs) {
+    // Walk up parent chain to find nearest container (level 2)
+    const dirById = new Map(allDirs.map(d => [d.id, d]));
+    const containerIds = new Set(containers.map(c => c.id));
+    let current = dir;
+    while (current && current.parent) {
+        if (containerIds.has(current.parent)) {
+            return containers.find(c => c.id === current.parent);
+        }
+        current = dirById.get(current.parent);
+    }
+    // Fallback: match by path prefix
+    const sorted = [...containers].sort((a, b) => b.file_path.length - a.file_path.length);
+    return sorted.find(c => dir.file_path.startsWith(c.file_path + '/')) || null;
 }

@@ -3,20 +3,10 @@ from callgraph.discovery import discover_files
 from callgraph.parsers.python_parser import parse_python_file
 from callgraph.parsers.typescript_parser import parse_typescript_file
 
-ABSTRACTION_LEVELS = {
-    # C3 — Component: data models, types, schemas
-    "models": 1, "types": 1, "schemas": 1,
-    # C2 — Container: services, utilities, business logic
-    "services": 2, "utils": 2, "hooks": 2, "lib": 2,
-    # C1 — Context: API surface, views, entry points
-    "api": 3, "routes": 3, "components": 3, "views": 3,
-    "main": 3, "app": 3, "index": 3,
-}
-
 PYTHON_LANGUAGES = {"python"}
 TS_LANGUAGES = {"typescript", "typescriptreact", "javascript", "javascriptreact"}
 
-def build_graph(root: Path) -> dict:
+def build_graph(root: Path, level_map: dict | None = None) -> dict:
     root = Path(root).resolve()
     files = discover_files(root)
 
@@ -40,7 +30,7 @@ def build_graph(root: Path) -> dict:
                     "file_path": dir_path,
                     "language": None,
                     "lines_of_code": 0,
-                    "abstraction_level": _get_abstraction_level(dir_path),
+                    "abstraction_level": _resolve_level(dir_path, level_map),
                     "parent": f"dir:{str(Path(*parts[:i]))}" if i > 0 else None,
                 })
                 # Directory containment
@@ -72,7 +62,7 @@ def build_graph(root: Path) -> dict:
         # File node
         file_id = f"file:{rel_path}"
         parent_dir = str(Path(rel_path).parent)
-        abstraction = _get_abstraction_level(rel_path)
+        abstraction = min(1, _resolve_level(parent_dir, level_map))
 
         nodes.append({
             "id": file_id,
@@ -118,13 +108,36 @@ def build_graph(root: Path) -> dict:
 
     return {"nodes": nodes, "edges": edges}
 
-def _get_abstraction_level(path: str) -> int:
-    parts = Path(path).parts
-    for part in parts:
-        stem = part.replace(".py", "").replace(".ts", "").replace(".tsx", "").replace(".js", "")
-        if stem in ABSTRACTION_LEVELS:
-            return ABSTRACTION_LEVELS[stem]
-    return 2  # default to C2 (Container)
+def _resolve_level(dir_path: str, level_map: dict | None) -> int:
+    """Resolve abstraction level for a directory path using the level map.
+
+    - Exact match in level_map → return that level
+    - Nearest ancestor at level 3 (system) → return 2 (container inside system)
+    - Nearest ancestor at level 2 (container) → return 1 (component inside container)
+    - No match → return 2 (default: container)
+    """
+    if not level_map:
+        return 2
+
+    # Normalize path
+    normalized = str(Path(dir_path))
+
+    # Exact match
+    if normalized in level_map:
+        return level_map[normalized]
+
+    # Walk ancestors from nearest to farthest, find the closest mapped one
+    parts = Path(normalized).parts
+    for i in range(len(parts) - 1, 0, -1):
+        ancestor = str(Path(*parts[:i]))
+        if ancestor in level_map:
+            ancestor_level = level_map[ancestor]
+            if ancestor_level == 2:
+                return 1  # component inside container
+            if ancestor_level == 3:
+                return 2  # container inside system
+
+    return 2  # default to container
 
 def _build_import_edges(parse_results: dict, files: list, edges: list):
     file_paths = {f["path"] for f in files}

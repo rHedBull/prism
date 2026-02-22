@@ -26,6 +26,10 @@ export function createTreePanel(graph, layerGroups, nodeMeshes, camera, controls
         }
     }
 
+    // Synthesize intermediate directory nodes so the tree shows full paths.
+    // e.g. docker/agent/mcp (level 1, parent=docker) gets an "agent" node inserted.
+    _insertIntermediateDirs(nodeById);
+
     // Build parent->children map from _layerParent
     const childrenOf = new Map();
     for (const [id, node] of nodeById) {
@@ -284,4 +288,62 @@ export function createTreePanel(graph, layerGroups, nodeMeshes, camera, controls
             renderTree(searchInput.value);
         },
     };
+}
+
+/**
+ * Insert synthetic directory nodes for intermediate path segments so the tree
+ * shows the full directory hierarchy instead of jumping from container to leaf.
+ *
+ * For a component at "frontend/src/components/analytics" whose _layerParent
+ * is the container "frontend", this creates nodes for "frontend/src" and
+ * "frontend/src/components" and re-wires the _layerParent chain through them.
+ */
+function _insertIntermediateDirs(nodeById) {
+    // Collect containers (level 2) by file_path for quick lookup
+    const containerPaths = new Map();
+    for (const [id, node] of nodeById) {
+        if (node._level === 2) containerPaths.set(node.file_path, id);
+    }
+
+    // For each component (level 1), check for missing intermediate dirs
+    const components = [...nodeById.entries()].filter(([, n]) => n._level === 1);
+    for (const [compId, comp] of components) {
+        const parentId = comp._layerParent;
+        const parent = nodeById.get(parentId);
+        if (!parent || parent._level !== 2) continue;
+
+        const parentPath = parent.file_path;          // e.g. "frontend"
+        const compPath = comp.file_path;              // e.g. "frontend/src/components/analytics"
+        const suffix = compPath.slice(parentPath.length + 1); // "src/components/analytics"
+        const segments = suffix.split('/');
+        if (segments.length <= 1) continue; // no intermediates needed
+
+        // Build intermediate nodes for each segment except the last (which is the component itself)
+        let currentParentId = parentId;
+        let currentPath = parentPath;
+        for (let i = 0; i < segments.length - 1; i++) {
+            currentPath += '/' + segments[i];
+            const dirId = 'dir:' + currentPath;
+
+            if (!nodeById.has(dirId)) {
+                nodeById.set(dirId, {
+                    id: dirId,
+                    type: 'directory',
+                    name: segments[i],
+                    file_path: currentPath,
+                    language: null,
+                    lines_of_code: 0,
+                    export_count: 0,
+                    abstraction_level: 1.5, // between container and component
+                    _level: 1.5,
+                    _layerParent: currentParentId,
+                    _synthetic: true,
+                });
+            }
+            currentParentId = dirId;
+        }
+
+        // Re-wire the component to point to its immediate parent intermediate dir
+        comp._layerParent = currentParentId;
+    }
 }
