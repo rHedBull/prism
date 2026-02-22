@@ -88,7 +88,7 @@ export function groupByAbstractionLevel(nodes, edges = []) {
         }
     }
     for (const node of nodes) {
-        if (node.type === 'function' || node.type === 'class') {
+        if (node.type === 'function' || node.type === 'class' || node.type === 'interface' || node.type === 'type_alias') {
             // parent is file:path, map file -> component
             const parentComponent = componentLookup.get(node.parent);
             layers[0].push({

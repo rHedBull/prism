@@ -31,6 +31,33 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
             name = source[name_node.start_byte:name_node.end_byte].decode()
             loc = node.end_point[0] - node.start_point[0] + 1
             body = node.child_by_field_name("body")
+
+            # Extract decorator names from parent decorated_definition
+            decorators = []
+            parent = node.parent
+            if parent and parent.type == "decorated_definition":
+                for child in parent.children:
+                    if child.type == "decorator":
+                        for sub in child.children:
+                            if sub.type == "identifier":
+                                decorators.append(source[sub.start_byte:sub.end_byte].decode())
+                            elif sub.type == "attribute":
+                                decorators.append(source[sub.start_byte:sub.end_byte].decode())
+                            elif sub.type == "call":
+                                func = sub.child_by_field_name("function")
+                                if func:
+                                    decorators.append(source[func.start_byte:func.end_byte].decode())
+
+            # Extract base class names
+            bases = []
+            superclasses = node.child_by_field_name("superclasses")
+            if superclasses:
+                for child in superclasses.children:
+                    if child.type == "identifier":
+                        bases.append(source[child.start_byte:child.end_byte].decode())
+                    elif child.type == "attribute":
+                        bases.append(source[child.start_byte:child.end_byte].decode())
+
             result.append({
                 "id": f"class:{file_path}:{name}",
                 "type": "class",
@@ -42,6 +69,8 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
                 "cyclomatic_complexity": _cyclomatic_complexity(body) if body else 1,
                 "param_count": 0,
                 "max_nesting": _max_nesting(body) if body else 0,
+                "decorators": decorators,
+                "bases": bases,
             })
 
     if node.type == "function_definition":

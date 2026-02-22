@@ -113,6 +113,9 @@ def build_graph(root: Path) -> dict:
     # Build call edges (function-level)
     _build_call_edges(file_parse_results, files, edges)
 
+    # Classify nodes as data / control / hybrid
+    _classify_roles(nodes, edges)
+
     return {"nodes": nodes, "edges": edges}
 
 def _get_abstraction_level(path: str) -> int:
@@ -232,3 +235,61 @@ def _build_call_edges(parse_results: dict, files: list, edges: list):
                         "type": "calls",
                         "weight": 1,
                     })
+
+DATA_BASES = {"BaseModel", "TypedDict", "NamedTuple", "Enum", "IntEnum", "StrEnum"}
+DATA_DECORATORS = {"dataclass", "dataclasses.dataclass"}
+
+def _classify_roles(nodes, edges):
+    """Assign role (data/control/hybrid) to every node."""
+    # Count outgoing call edges per node for function classification
+    call_sources = set()
+    for edge in edges:
+        if edge["type"] == "calls":
+            call_sources.add(edge["from"])
+
+    # Build parent->children map for majority vote
+    children_by_parent = {}
+    node_by_id = {}
+    for node in nodes:
+        node_by_id[node["id"]] = node
+        parent_id = node.get("parent")
+        if parent_id:
+            children_by_parent.setdefault(parent_id, []).append(node)
+
+    # Classify leaf nodes first
+    for node in nodes:
+        ntype = node["type"]
+        if ntype in ("interface", "type_alias"):
+            node["role"] = "data"
+        elif ntype == "class":
+            bases = set(node.get("bases", []))
+            decorators = set(node.get("decorators", []))
+            if bases & DATA_BASES or decorators & DATA_DECORATORS:
+                node["role"] = "data"
+            else:
+                node["role"] = "hybrid"
+        elif ntype == "function":
+            node["role"] = "control" if node["id"] in call_sources else "data"
+        # files and directories get majority vote below
+
+    # Majority vote for aggregated nodes (files, directories)
+    # Process bottom-up: files first, then directories
+    for ntype in ("file", "directory"):
+        typed = [n for n in nodes if n["type"] == ntype]
+        if ntype == "directory":
+            typed.sort(key=lambda n: n["id"].count("/"), reverse=True)
+        for node in typed:
+            children = children_by_parent.get(node["id"], [])
+            roles = [c.get("role") for c in children if c.get("role")]
+            if not roles:
+                node["role"] = "hybrid"
+                continue
+            data_count = roles.count("data")
+            control_count = roles.count("control")
+            total = len(roles)
+            if data_count / total > 0.6:
+                node["role"] = "data"
+            elif control_count / total > 0.6:
+                node["role"] = "control"
+            else:
+                node["role"] = "hybrid"

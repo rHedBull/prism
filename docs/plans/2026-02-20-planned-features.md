@@ -332,7 +332,7 @@ Custom and automatic node grouping beyond the directory hierarchy.
 | ~~P1~~ | ~~Metric-Driven Block Size & Color~~ | ~~Medium~~ | ~~Done~~ — complexity-aware sizing, color by any metric, relative to visible blocks |
 | ~~P1~~ | ~~Additional Metrics~~ | ~~Medium~~ | ~~Done~~ — cyclomatic complexity, param count, nesting depth, instability, coupling, node type, None option |
 | P2 | User / API Journeys | High | Route detection, call chain tracing |
-| P2 | Data vs Control Separation | Medium | Node/edge classifier |
+| ~~P2~~ | ~~Data vs Control Separation~~ | ~~Medium~~ | ~~Done~~ — node/edge role classification, role-based coloring, role filter checkboxes |
 | P2 | Data Streams | High | Type flow analysis |
 | P2 | Animated Journeys | Medium | Journey system (P2 dep) |
 | P3 | Fly-Through | Medium | Camera path recorder |

@@ -80,9 +80,10 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
                 if name_node:
                     name = source[name_node.start_byte:name_node.end_byte].decode()
                     loc = child.end_point[0] - child.start_point[0] + 1
+                    node_type = _class_like_type(child)
                     result.append({
-                        "id": f"class:{file_path}:{name}",
-                        "type": "class",
+                        "id": f"{node_type}:{file_path}:{name}",
+                        "type": node_type,
                         "name": name,
                         "file_path": file_path,
                         "lines_of_code": loc,
@@ -99,9 +100,10 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
         if name_node:
             name = source[name_node.start_byte:name_node.end_byte].decode()
             loc = node.end_point[0] - node.start_point[0] + 1
+            node_type = _class_like_type(node)
             result.append({
-                "id": f"class:{file_path}:{name}",
-                "type": "class",
+                "id": f"{node_type}:{file_path}:{name}",
+                "type": node_type,
                 "name": name,
                 "file_path": file_path,
                 "lines_of_code": loc,
@@ -135,6 +137,14 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
         # Don't recurse into function bodies for top-level extraction
         if node.type not in ("function_declaration", "arrow_function", "method_definition", "export_statement"):
             _extract_nodes(child, file_path, source, result)
+
+def _class_like_type(node):
+    """Map AST node type to our schema type for class-like declarations."""
+    if node.type == "interface_declaration":
+        return "interface"
+    if node.type == "type_alias_declaration":
+        return "type_alias"
+    return "class"
 
 def _add_function_node(name_node, scope_node, file_path, source, result, body_node=None):
     name = source[name_node.start_byte:name_node.end_byte].decode()
