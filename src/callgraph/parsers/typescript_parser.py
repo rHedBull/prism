@@ -82,7 +82,7 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
                     loc = child.end_point[0] - child.start_point[0] + 1
                     node_type = _class_like_type(child)
                     result.append({
-                        "id": f"class:{file_path}:{name}",
+                        "id": f"{node_type}:{file_path}:{name}",
                         "type": node_type,
                         "name": name,
                         "file_path": file_path,
@@ -102,7 +102,7 @@ def _extract_nodes(node, file_path: str, source: bytes, result: list):
             loc = node.end_point[0] - node.start_point[0] + 1
             node_type = _class_like_type(node)
             result.append({
-                "id": f"class:{file_path}:{name}",
+                "id": f"{node_type}:{file_path}:{name}",
                 "type": node_type,
                 "name": name,
                 "file_path": file_path,

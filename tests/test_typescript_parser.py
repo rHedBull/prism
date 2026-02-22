@@ -57,7 +57,7 @@ def test_class_declaration_stays_class():
     # All non-function nodes should be interface or type_alias
     non_func = [n for n in result["nodes"] if n["type"] != "function"]
     for n in non_func:
-        assert n["type"] in ("interface", "type_alias", "class")
+        assert n["type"] in ("interface", "type_alias")
 
 def test_extracts_imports():
     result = parse_typescript_file(

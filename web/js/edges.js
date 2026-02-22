@@ -8,12 +8,6 @@ const EDGE_COLORS = {
     contains: 0xcccad2,
 };
 
-const EDGE_ROLE_COLORS = {
-    data: 0x00E5CC,
-    control: 0xFF6B35,
-    mixed: 0x9E9E9E,
-};
-
 export function createEdges(edges, nodeMeshes, scene, allNodes) {
     const edgeMeshes = [];
 

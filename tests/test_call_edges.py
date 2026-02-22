@@ -20,6 +20,16 @@ def test_same_file_typescript_calls():
         f"Expected useUnreadCount -> useNotifications call edge"
 
 
+def test_cross_file_python_calls():
+    """cache_manager calls get_redis from redis_client across files"""
+    graph = build_graph(TEST_PROJECT)
+    calls = [(e["from"], e["to"]) for e in graph["edges"] if e["type"] == "calls"]
+    assert any(
+        "cache_manager" in f and "get_redis" in t and "redis_client" in t
+        for f, t in calls
+    ), f"Expected cache_manager -> redis_client.get_redis cross-file call edge"
+
+
 def test_call_edges_reference_valid_nodes():
     """All call edges should reference existing function nodes"""
     graph = build_graph(TEST_PROJECT)

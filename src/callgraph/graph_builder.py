@@ -275,9 +275,10 @@ def _classify_roles(nodes, edges):
     # Majority vote for aggregated nodes (files, directories)
     # Process bottom-up: files first, then directories
     for ntype in ("file", "directory"):
-        for node in nodes:
-            if node["type"] != ntype:
-                continue
+        typed = [n for n in nodes if n["type"] == ntype]
+        if ntype == "directory":
+            typed.sort(key=lambda n: n["id"].count("/"), reverse=True)
+        for node in typed:
             children = children_by_parent.get(node["id"], [])
             roles = [c.get("role") for c in children if c.get("role")]
             if not roles:
