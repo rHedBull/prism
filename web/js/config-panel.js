@@ -3,7 +3,7 @@
  */
 import * as THREE from 'three';
 import { requestRender } from './scene.js';
-import { setSizeMetric, setColorMetric, computeHeight, computeColor, computeMetricRange } from './metrics.js';
+import { setSizeMetric, setColorMetric, getColorMetric, computeHeight, computeColor, computeMetricRange } from './metrics.js';
 
 export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap) {
     // Auto-populate languages from graph data
@@ -97,6 +97,20 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
         });
     }
 
+    // Role toggles
+    for (const role of ['data', 'control', 'hybrid']) {
+        const checkbox = document.getElementById(`role-${role}`);
+        if (!checkbox) continue;
+        checkbox.addEventListener('change', () => {
+            const visible = checkbox.checked;
+            for (const [mesh, data] of nodeDataMap) {
+                if (data.role === role) mesh.visible = visible;
+            }
+            updateEdgeVisibility();
+            reapplyMetrics();
+        });
+    }
+
     // Metric dropdowns — recompute sizes and colors relative to visible blocks
     function reapplyMetrics() {
         const visibleNodes = [];
@@ -130,6 +144,22 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
             mesh.material.emissiveIntensity = 0.15;
             mesh.userData._origColor = newColor;
         }
+
+        // Recolor edges based on role when color metric is 'role'
+        const EDGE_ROLE_COLORS = { data: 0x00E5CC, control: 0xFF6B35, mixed: 0x9E9E9E };
+        const EDGE_TYPE_COLORS = { imports: 0x8c60f3, calls: 0x353148, inherits_from: 0x6a3fd4, depends_on: 0x8e8a9c };
+        const isRoleMode = getColorMetric() === 'role';
+        for (const line of edgeMeshes) {
+            if (!line.material || !line.material.color) continue;
+            if (isRoleMode) {
+                const roleColor = EDGE_ROLE_COLORS[line.userData.edgeRole] || 0x9E9E9E;
+                line.material.color.setHex(roleColor);
+            } else {
+                const typeColor = EDGE_TYPE_COLORS[line.userData.edgeData?.type] || 0x444444;
+                line.material.color.setHex(typeColor);
+            }
+        }
+
         requestRender('metrics');
     }
 

@@ -8,15 +8,26 @@ const EDGE_COLORS = {
     contains: 0xcccad2,
 };
 
+const EDGE_ROLE_COLORS = {
+    data: 0x00E5CC,
+    control: 0xFF6B35,
+    mixed: 0x9E9E9E,
+};
+
 export function createEdges(edges, nodeMeshes, scene, allNodes) {
     const edgeMeshes = [];
 
     // Build parent lookup: node ID -> parent ID
+    // Build role lookup: node ID -> role
     const parentMap = {};
+    const roleMap = {};
     if (allNodes) {
         for (const node of allNodes) {
             if (node.parent) {
                 parentMap[node.id] = node.parent;
+            }
+            if (node.role) {
+                roleMap[node.id] = node.role;
             }
         }
     }
@@ -83,7 +94,15 @@ export function createEdges(edges, nodeMeshes, scene, allNodes) {
             line = new THREE.Line(geometry, material);
         }
 
-        line.userData = { type: 'edge', edgeData: edge, baseOpacity, fromMesh, toMesh };
+        // Classify edge role from endpoint roles
+        const fromRole = roleMap[edge.from] || 'hybrid';
+        const toRole = roleMap[edge.to] || 'hybrid';
+        let edgeRole;
+        if (fromRole === 'data' && toRole === 'data') edgeRole = 'data';
+        else if (fromRole === 'control' && toRole === 'control') edgeRole = 'control';
+        else edgeRole = 'mixed';
+
+        line.userData = { type: 'edge', edgeData: edge, baseOpacity, fromMesh, toMesh, edgeRole };
         scene.add(line);
         edgeMeshes.push(line);
     }
