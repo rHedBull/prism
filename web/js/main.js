@@ -3,6 +3,8 @@ import { createScene, initRenderer, animateCamera, requestRender, panelState } f
 import { loadGraph, groupByAbstractionLevel } from './graph-loader.js';
 import { createLayers, LAYER_SIZE } from './layers.js';
 import { createEdges } from './edges.js';
+import { createSemanticEdges, updateSemanticEdgeVisibility } from './semantic-edges.js';
+import { createNodeIcons, updateIconVisibility } from './node-icons.js';
 import { setupInteraction } from './interaction.js';
 import { createTreePanel } from './tree-panel.js';
 import { initConfigPanel } from './config-panel.js';
@@ -66,6 +68,14 @@ async function init() {
         const { layerMeshes, nodeMeshes, nodeDataMap } = await createLayers(layerGroups, graph.edges, scene);
         const edgeMeshes = createEdges(graph.edges, nodeMeshes, scene, graph.nodes);
 
+        // Semantic edges and node icons (from optional semantic.json)
+        let semanticEdgeGroups = [];
+        let iconSprites = [];
+        if (graph.semantic) {
+            semanticEdgeGroups = createSemanticEdges(graph.semantic, nodeMeshes, scene);
+            iconSprites = createNodeIcons(graph.semantic, nodeMeshes, scene);
+        }
+
         // Build parent map for call edge hover resolution
         const parentMap = {};
         for (const node of graph.nodes) {
@@ -83,7 +93,7 @@ async function init() {
         };
 
         // Init config panel with mesh references
-        initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap);
+        initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap, semanticEdgeGroups, iconSprites);
 
         // Check for diff.json and set up toggle
         const diff = await loadDiff('.');
