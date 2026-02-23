@@ -13,6 +13,7 @@ const ARROWHEAD_LENGTH = 1.2;
 const ARROWHEAD_RADIUS = 0.5;
 const MIN_SEG_FOR_ARROW = 3;
 const PORT_MARGIN = 0.3;           // margin from box edge for port grid
+const STUB_LEN = 3;               // how far edges extend perpendicular from face before routing
 
 /**
  * Create circuit-style orthogonal edges for C3/C2 semantic relationships.
@@ -39,7 +40,7 @@ export function createSemanticEdges(semanticData, nodeMeshes, scene) {
     }
 
     // Assign each connection to a face and a port on that face
-    const portAssignments = new Map(); // `${nodeId}::${edgeIdx}::${role}` -> Vector3
+    const portAssignments = new Map(); // key -> { pos: Vector3, normal: Vector3 }
     for (const [nodeId, conns] of nodeConns) {
         const mesh = nodeMeshes[nodeId];
         const params = mesh.geometry.parameters;
@@ -60,10 +61,11 @@ export function createSemanticEdges(semanticData, nodeMeshes, scene) {
         for (const [face, faceConns] of Object.entries(faces)) {
             if (faceConns.length === 0) continue;
             const ports = computePortGrid(pos, face, hw, hh, hd, faceConns.length);
+            const normal = faceNormal(face);
             for (let i = 0; i < faceConns.length; i++) {
                 const conn = faceConns[i];
                 const key = `${nodeId}::${conn.edge.from}::${conn.edge.to}::${conn.role}`;
-                portAssignments.set(key, ports[i]);
+                portAssignments.set(key, { pos: ports[i], normal });
             }
         }
     }
@@ -76,9 +78,12 @@ export function createSemanticEdges(semanticData, nodeMeshes, scene) {
 
         const srcKey = `${edge.from}::${edge.from}::${edge.to}::src`;
         const tgtKey = `${edge.to}::${edge.from}::${edge.to}::tgt`;
-        const start = portAssignments.get(srcKey);
-        const end = portAssignments.get(tgtKey);
-        if (!start || !end) continue;
+        const srcPort = portAssignments.get(srcKey);
+        const tgtPort = portAssignments.get(tgtKey);
+        if (!srcPort || !tgtPort) continue;
+
+        const start = srcPort.pos;
+        const end = tgtPort.pos;
 
         const group = new THREE.Group();
         group.userData = { type: 'semantic-edge', edgeData: edge };
@@ -90,8 +95,8 @@ export function createSemanticEdges(semanticData, nodeMeshes, scene) {
         const role = callWeight > importWeight ? 'control' : importWeight > callWeight ? 'data' : 'mixed';
         const color = ROLE_COLORS[role] || ROLE_COLORS.mixed;
 
-        // Build orthogonal waypoints from port to port
-        const waypoints = computeCircuitPath(start, end);
+        // Circuit route: exit stub → orthogonal connection → entry stub
+        const waypoints = computeStubRoute(start, srcPort.normal, end, tgtPort.normal);
 
         // Tube thickness from weight
         const t = Math.min((edge.weight || 1) / WEIGHT_MAX, 1);
@@ -265,35 +270,66 @@ function computePortGrid(pos, face, hw, hh, hd, count) {
     return ports;
 }
 
-/**
- * Compute orthogonal path between two port positions.
- * Same-layer: Z-shape on XZ plane.
- * Cross-layer: staircase through Y.
- */
-function computeCircuitPath(start, end) {
-    const sameLayer = Math.abs(start.y - end.y) < 1;
-
-    if (sameLayer) {
-        const midX = (start.x + end.x) / 2;
-        return [
-            start.clone(),
-            new THREE.Vector3(midX, start.y, start.z),
-            new THREE.Vector3(midX, end.y, end.z),
-            end.clone(),
-        ];
-    } else {
-        const offsetX = (end.x - start.x) * 0.3;
-        const midY = (start.y + end.y) / 2;
-        const midZ = (start.z + end.z) / 2;
-        return [
-            start.clone(),
-            new THREE.Vector3(start.x + offsetX, start.y, start.z),
-            new THREE.Vector3(start.x + offsetX, midY, midZ),
-            new THREE.Vector3(end.x - offsetX, midY, midZ),
-            new THREE.Vector3(end.x - offsetX, end.y, end.z),
-            end.clone(),
-        ];
+/** Face name → outward unit normal */
+function faceNormal(face) {
+    switch (face) {
+        case '+x': return new THREE.Vector3(1, 0, 0);
+        case '-x': return new THREE.Vector3(-1, 0, 0);
+        case '+z': return new THREE.Vector3(0, 0, 1);
+        case '-z': return new THREE.Vector3(0, 0, -1);
+        case '+y': return new THREE.Vector3(0, 1, 0);
+        case '-y': return new THREE.Vector3(0, -1, 0);
     }
+}
+
+/**
+ * Build an orthogonal (circuit-style) route between two ports.
+ *
+ * 1. Exit stub: go along srcNormal by STUB_LEN  (clears the source node)
+ * 2. Entry stub: go along tgtNormal by STUB_LEN  (clears the target node)
+ * 3. Connect stub endpoints with at most 3 orthogonal segments,
+ *    preserving the unique coordinates from each stub so paths never merge.
+ */
+function computeStubRoute(start, srcNormal, end, tgtNormal) {
+    const exitPt = start.clone().addScaledVector(srcNormal, STUB_LEN);
+    const entryPt = end.clone().addScaledVector(tgtNormal, STUB_LEN);
+
+    // Connect exitPt → entryPt with orthogonal segments.
+    // Strategy: move along X first (to midX), then Z, then Y — using
+    // the stub endpoints' unique coords so parallel edges stay separated.
+    const dx = entryPt.x - exitPt.x;
+    const dy = entryPt.y - exitPt.y;
+    const dz = entryPt.z - exitPt.z;
+
+    const midPoints = [];
+
+    if (Math.abs(dy) < 0.5) {
+        // Same layer: route on XZ plane — only axis-aligned segments
+        const midX = (exitPt.x + entryPt.x) / 2;
+        midPoints.push(
+            new THREE.Vector3(midX, exitPt.y, exitPt.z),
+            new THREE.Vector3(midX, exitPt.y, entryPt.z),
+            new THREE.Vector3(midX, entryPt.y, entryPt.z),
+        );
+    } else {
+        // Cross-layer: only axis-aligned segments through Y
+        const midY = (exitPt.y + entryPt.y) / 2;
+        midPoints.push(
+            new THREE.Vector3(exitPt.x, midY, exitPt.z),
+            new THREE.Vector3(exitPt.x, midY, entryPt.z),
+            new THREE.Vector3(entryPt.x, midY, entryPt.z),
+        );
+    }
+
+    // Remove duplicate consecutive points
+    const raw = [start.clone(), exitPt, ...midPoints, entryPt, end.clone()];
+    const waypoints = [raw[0]];
+    for (let i = 1; i < raw.length; i++) {
+        if (raw[i].distanceTo(raw[i - 1]) > 0.01) {
+            waypoints.push(raw[i]);
+        }
+    }
+    return waypoints;
 }
 
 function createLabelSprite(text, color) {
