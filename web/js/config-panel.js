@@ -4,8 +4,10 @@
 import * as THREE from 'three';
 import { requestRender } from './scene.js';
 import { setSizeMetric, setColorMetric, getColorMetric, computeHeight, computeColor, computeMetricRange } from './metrics.js';
+import { updateSemanticEdgeVisibility } from './semantic-edges.js';
+import { updateIconVisibility } from './node-icons.js';
 
-export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap) {
+export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap, semanticEdgeGroups = [], iconSprites = []) {
     // Auto-populate languages from graph data
     const languages = new Set();
     for (const node of graph.nodes) {
@@ -41,6 +43,10 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
             const endpointsVisible = fromMesh.visible && toMesh.visible;
             line.visible = typeVisible && endpointsVisible;
         }
+        // Update semantic edge visibility
+        updateSemanticEdgeVisibility(semanticEdgeGroups, nodeMeshes);
+        // Update icon visibility
+        updateIconVisibility(iconSprites, nodeMeshes);
     }
 
     // Layer toggles
