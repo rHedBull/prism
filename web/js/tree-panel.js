@@ -195,12 +195,19 @@ export function createTreePanel(graph, layerGroups, nodeMeshes, camera, controls
             }
         });
 
-        // Double-click: focus camera on node
+        // Double-click: select node (persistent hover) + focus camera
         row.addEventListener('dblclick', (e) => {
             e.stopPropagation();
             selectedNodeId = nodeId;
+            _expandToNode(nodeId);
+            expanded.add(nodeId); // also expand the node itself
             focusOnNode(nodeId);
+            if (window._treePanelSelectCallback) {
+                window._treePanelSelectCallback(nodeId);
+            }
             renderTree(searchInput.value);
+            const row2 = _rowById.get(nodeId);
+            if (row2) row2.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         });
 
         // Single click: select + toggle expand
@@ -277,9 +284,33 @@ export function createTreePanel(graph, layerGroups, nodeMeshes, camera, controls
         }
     }
 
+    // Expand all ancestors of a node so it becomes visible in the tree
+    function _expandToNode(nodeId) {
+        const node = nodeById.get(nodeId);
+        if (!node) return false;
+        let changed = false;
+        let pid = node._layerParent;
+        while (pid && nodeById.has(pid)) {
+            if (!expanded.has(pid)) {
+                expanded.add(pid);
+                changed = true;
+            }
+            pid = nodeById.get(pid)._layerParent;
+        }
+        return changed;
+    }
+
     return {
         selectNode(nodeId) {
-            _updateSelection(nodeId);
+            const needsRerender = _expandToNode(nodeId);
+            if (needsRerender) {
+                selectedNodeId = nodeId;
+                renderTree(searchInput.value);
+                const row = _rowById.get(nodeId);
+                if (row) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            } else {
+                _updateSelection(nodeId);
+            }
         },
         clearSelection() {
             _updateSelection(null);

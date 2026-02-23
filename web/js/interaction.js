@@ -20,6 +20,7 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
     let focusedLayer = null;
     const spotlightLines = [];
     let hoverFromTree = false;
+    let selectedNodeId = null;  // Persistent selection via double-click
 
     _nodeDataMapRef = nodeDataMap;
     _edgeMeshesRef = edgeMeshes;
@@ -130,15 +131,90 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         }
     }
 
+    // Apply persistent selection: full hover effects locked on a node
+    function applySelection(nodeId) {
+        const mesh = _idToMesh[nodeId];
+        if (!mesh) return;
+        const data = nodeDataMap.get(mesh);
+        if (!data) return;
+
+        // Clear any transient hover state
+        if (hoveredMesh) {
+            if (hoveredMesh.material.emissive) hoveredMesh.material.emissive.setHex(0x000000);
+        }
+        hoveredMesh = null;
+        hoverFromTree = false;
+
+        // Reset first then apply
+        resetEdgeHighlights(edgeMeshes);
+        resetNodeOpacity(nodeMeshes);
+        clearSpotlights();
+
+        // Apply highlight effects
+        if (mesh.material.emissive) mesh.material.emissive.setHex(0x222222);
+        showInfoPanel(data);
+        highlightEdges(edgeMeshes, data.id, parentMap);
+
+        const descendants = getDescendants(data.id);
+        const ancestors = getAncestors(data.id);
+        const family = new Set([data.id, ...descendants, ...ancestors]);
+
+        const { diffActive: _da, addedIds: _ai, removedIds: _ri, modifiedIds: _mi, movedIds: _moi } = getDiffState();
+        for (const [id, m] of Object.entries(nodeMeshes)) {
+            const isDiffNode = _da && (_ai.has(id) || _ri.has(id) || _mi.has(id) || _moi.has(id));
+            if (isDiffNode) continue;
+            if (family.has(id)) {
+                m.material.color.setHex(m.userData._origColor);
+                m.material.emissiveIntensity = descendants.has(id) ? 0.5 : 0.15;
+                m.material.opacity = _da ? 0.6 : 1.0;
+            } else {
+                if (_da) {
+                    m.material.opacity = 0.05;
+                    m.material.emissiveIntensity = 0.0;
+                } else {
+                    m.material.color.setHex(0xd8d6dc);
+                    m.material.emissiveIntensity = 0.0;
+                }
+            }
+        }
+
+        const directChildren = childMap[data.id] || [];
+        const childMeshes = directChildren.map(cid => nodeMeshes[cid]).filter(Boolean);
+        if (childMeshes.length > 0) {
+            drawSpotlight(mesh, childMeshes, mesh.material.color.getHex());
+        }
+        requestRender();
+    }
+
+    function clearSelection() {
+        if (!selectedNodeId) return;
+        const oldMesh = _idToMesh[selectedNodeId];
+        if (oldMesh && oldMesh.material.emissive) oldMesh.material.emissive.setHex(0x000000);
+        selectedNodeId = null;
+        infoPanel.style.display = 'none';
+        resetEdgeHighlights(edgeMeshes);
+        resetNodeOpacity(nodeMeshes);
+        clearSpotlights();
+        if (window._graphHoverCallback) window._graphHoverCallback(null);
+        requestRender();
+    }
+
     let _mouseMoveQueued = false;
     window.addEventListener('mousemove', (event) => {
+        // Always update mouse coords (needed for dblclick raycasting)
         mouse.x = ((event.clientX - getLeftOffset()) / getCanvasWidth()) * 2 - 1;
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+        // Skip transient hover when a node is persistently selected
+        if (selectedNodeId) return;
 
         if (_mouseMoveQueued) return;
         _mouseMoveQueued = true;
         requestAnimationFrame(() => {
         _mouseMoveQueued = false;
+
+        // Re-check inside rAF since selection may have changed
+        if (selectedNodeId) return;
 
         raycaster.setFromCamera(mouse, camera);
         const intersects = raycaster.intersectObjects(_raycastMeshes);
@@ -209,6 +285,31 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         }); // end requestAnimationFrame
     }); // end mousemove
 
+    // Double-click on 3D node: persistent selection with hover effects
+    window.addEventListener('dblclick', (event) => {
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(_raycastMeshes);
+
+        if (intersects.length > 0) {
+            const mesh = intersects[0].object;
+            const data = nodeDataMap.get(mesh);
+            if (data) {
+                // Toggle: double-click same node deselects
+                if (selectedNodeId === data.id) {
+                    clearSelection();
+                    if (window._graphHoverCallback) window._graphHoverCallback(null);
+                } else {
+                    selectedNodeId = data.id;
+                    applySelection(selectedNodeId);
+                    if (window._graphHoverCallback) window._graphHoverCallback(data.id);
+                }
+            }
+        } else {
+            // Double-click empty space: clear selection
+            clearSelection();
+        }
+    });
+
     window.addEventListener('click', (event) => {
         raycaster.setFromCamera(mouse, camera);
 
@@ -234,14 +335,21 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
     });
 
     window.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && focusedLayer !== null) {
-            focusedLayer = null;
-            animateCameraFn(camera, controls, defaultCameraPos, defaultTarget);
+        if (event.key === 'Escape') {
+            if (selectedNodeId) {
+                clearSelection();
+            } else if (focusedLayer !== null) {
+                focusedLayer = null;
+                animateCameraFn(camera, controls, defaultCameraPos, defaultTarget);
+            }
         }
     });
 
     // Tree panel hover: highlight a node by id (from panel hover)
     window._treePanelHoverCallback = (nodeId) => {
+        // Skip transient hover when a node is persistently selected
+        if (selectedNodeId) return;
+
         const mesh = _idToMesh[nodeId];
         if (!mesh) return;
 
@@ -292,6 +400,9 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
     };
 
     window._treePanelLeaveCallback = () => {
+        // Don't clear highlights if a node is persistently selected
+        if (selectedNodeId) return;
+
         if (hoveredMesh && hoverFromTree) {
             if (hoveredMesh.material.emissiveIntensity !== undefined) hoveredMesh.material.emissiveIntensity = 0.15;
             hoveredMesh = null;
@@ -301,6 +412,16 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
             resetNodeOpacity(nodeMeshes);
             clearSpotlights();
             requestRender();
+        }
+    };
+
+    // Tree panel double-click: persistent selection with hover effects
+    window._treePanelSelectCallback = (nodeId) => {
+        if (selectedNodeId === nodeId) {
+            clearSelection();
+        } else {
+            selectedNodeId = nodeId;
+            applySelection(selectedNodeId);
         }
     };
 }
