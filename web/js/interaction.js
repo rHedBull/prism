@@ -205,16 +205,10 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         mouse.x = ((event.clientX - getLeftOffset()) / getCanvasWidth()) * 2 - 1;
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-        // Skip transient hover when a node is persistently selected
-        if (selectedNodeId) return;
-
         if (_mouseMoveQueued) return;
         _mouseMoveQueued = true;
         requestAnimationFrame(() => {
         _mouseMoveQueued = false;
-
-        // Re-check inside rAF since selection may have changed
-        if (selectedNodeId) return;
 
         raycaster.setFromCamera(mouse, camera);
         const intersects = raycaster.intersectObjects(_raycastMeshes);
@@ -273,13 +267,20 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                 requestRender();
             }
         } else if (hoveredMesh && !hoverFromTree) {
-            if (hoveredMesh.material.emissiveIntensity !== undefined) hoveredMesh.material.emissiveIntensity = 0.15;
+            if (hoveredMesh.material.emissive) hoveredMesh.material.emissive.setHex(0x000000);
             hoveredMesh = null;
-            infoPanel.style.display = 'none';
-            resetEdgeHighlights(edgeMeshes);
-            resetNodeOpacity(nodeMeshes);
-            clearSpotlights();
-            if (window._graphHoverCallback) window._graphHoverCallback(null);
+
+            // Restore selection effects or reset to default
+            if (selectedNodeId) {
+                applySelection(selectedNodeId);
+                if (window._graphHoverCallback) window._graphHoverCallback(selectedNodeId);
+            } else {
+                infoPanel.style.display = 'none';
+                resetEdgeHighlights(edgeMeshes);
+                resetNodeOpacity(nodeMeshes);
+                clearSpotlights();
+                if (window._graphHoverCallback) window._graphHoverCallback(null);
+            }
             requestRender();
         }
         }); // end requestAnimationFrame
@@ -347,9 +348,6 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
 
     // Tree panel hover: highlight a node by id (from panel hover)
     window._treePanelHoverCallback = (nodeId) => {
-        // Skip transient hover when a node is persistently selected
-        if (selectedNodeId) return;
-
         const mesh = _idToMesh[nodeId];
         if (!mesh) return;
 
@@ -400,17 +398,21 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
     };
 
     window._treePanelLeaveCallback = () => {
-        // Don't clear highlights if a node is persistently selected
-        if (selectedNodeId) return;
-
         if (hoveredMesh && hoverFromTree) {
-            if (hoveredMesh.material.emissiveIntensity !== undefined) hoveredMesh.material.emissiveIntensity = 0.15;
+            if (hoveredMesh.material.emissive) hoveredMesh.material.emissive.setHex(0x000000);
             hoveredMesh = null;
             hoverFromTree = false;
-            infoPanel.style.display = 'none';
-            resetEdgeHighlights(edgeMeshes);
-            resetNodeOpacity(nodeMeshes);
-            clearSpotlights();
+
+            // Restore selection effects or reset to default
+            if (selectedNodeId) {
+                applySelection(selectedNodeId);
+                if (window._graphHoverCallback) window._graphHoverCallback(selectedNodeId);
+            } else {
+                infoPanel.style.display = 'none';
+                resetEdgeHighlights(edgeMeshes);
+                resetNodeOpacity(nodeMeshes);
+                clearSpotlights();
+            }
             requestRender();
         }
     };
