@@ -3,6 +3,7 @@ import { highlightEdges, resetEdgeHighlights } from './edges.js';
 import { getLeftOffset, getCanvasWidth, requestRender } from './scene.js';
 import { getDiffState, getDiffHoverInfo } from './diff-overlay.js';
 import { getSizeInfo } from './metrics.js';
+import { get2DNodeDataMap, zoomToNode } from './mode-2d.js';
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -210,8 +211,13 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         requestAnimationFrame(() => {
         _mouseMoveQueued = false;
 
-        raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObjects(_raycastMeshes);
+        const activeCamera = window._activeCamera || camera;
+        const is2D = window._viewMode === '2d';
+        const activeRaycastMeshes = is2D ? Array.from(get2DNodeDataMap().keys()) : _raycastMeshes;
+        const activeDataMap = is2D ? get2DNodeDataMap() : nodeDataMap;
+
+        raycaster.setFromCamera(mouse, activeCamera);
+        const intersects = raycaster.intersectObjects(activeRaycastMeshes);
 
         if (intersects.length > 0) {
             const mesh = intersects[0].object;
@@ -219,7 +225,7 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                 if (hoveredMesh) {
                     if (hoveredMesh.material.emissive) hoveredMesh.material.emissive.setHex(0x000000);
                     resetEdgeHighlights(edgeMeshes);
-                    resetNodeOpacity(nodeMeshes);
+                    if (!is2D) resetNodeOpacity(nodeMeshes);
                     clearSpotlights();
                 }
 
@@ -227,42 +233,44 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                 if (mesh.material.emissive) mesh.material.emissive.setHex(0x222222);
 
                 hoverFromTree = false;
-                const data = nodeDataMap.get(mesh);
+                const data = activeDataMap.get(mesh);
                 showInfoPanel(data);
-                highlightEdges(edgeMeshes, data.id, parentMap);
+                if (!is2D) highlightEdges(edgeMeshes, data.id, parentMap);
 
                 if (window._graphHoverCallback) window._graphHoverCallback(data.id);
 
-                const descendants = getDescendants(data.id);
-                const ancestors = getAncestors(data.id);
-                const family = new Set([data.id, ...descendants, ...ancestors]);
+                if (!is2D) {
+                    const descendants = getDescendants(data.id);
+                    const ancestors = getAncestors(data.id);
+                    const family = new Set([data.id, ...descendants, ...ancestors]);
 
-                const { diffActive: _da, addedIds: _ai, removedIds: _ri, modifiedIds: _mi, movedIds: _moi } = getDiffState();
-                for (const [id, m] of Object.entries(nodeMeshes)) {
-                    const isDiffNode = _da && (_ai.has(id) || _ri.has(id) || _mi.has(id) || _moi.has(id));
-                    if (isDiffNode) continue; // don't touch diff-colored nodes
-                    if (family.has(id)) {
-                        m.material.color.setHex(m.userData._origColor);
-                        m.material.emissiveIntensity = descendants.has(id) ? 0.5 : 0.15;
-                        m.material.opacity = _da ? 0.6 : 1.0;
-                    } else {
-                        if (_da) {
-                            m.material.opacity = 0.05;
-                            m.material.emissiveIntensity = 0.0;
+                    const { diffActive: _da, addedIds: _ai, removedIds: _ri, modifiedIds: _mi, movedIds: _moi } = getDiffState();
+                    for (const [id, m] of Object.entries(nodeMeshes)) {
+                        const isDiffNode = _da && (_ai.has(id) || _ri.has(id) || _mi.has(id) || _moi.has(id));
+                        if (isDiffNode) continue;
+                        if (family.has(id)) {
+                            m.material.color.setHex(m.userData._origColor);
+                            m.material.emissiveIntensity = descendants.has(id) ? 0.5 : 0.15;
+                            m.material.opacity = _da ? 0.6 : 1.0;
                         } else {
-                            m.material.color.setHex(0xd8d6dc);
-                            m.material.emissiveIntensity = 0.0;
+                            if (_da) {
+                                m.material.opacity = 0.05;
+                                m.material.emissiveIntensity = 0.0;
+                            } else {
+                                m.material.color.setHex(0xd8d6dc);
+                                m.material.emissiveIntensity = 0.0;
+                            }
                         }
                     }
-                }
 
-                const directChildren = childMap[data.id] || [];
-                const childMeshes = directChildren
-                    .map(cid => nodeMeshes[cid])
-                    .filter(Boolean);
-                if (childMeshes.length > 0) {
-                    const color = mesh.material.color.getHex();
-                    drawSpotlight(mesh, childMeshes, color);
+                    const directChildren = childMap[data.id] || [];
+                    const childMeshes = directChildren
+                        .map(cid => nodeMeshes[cid])
+                        .filter(Boolean);
+                    if (childMeshes.length > 0) {
+                        const color = mesh.material.color.getHex();
+                        drawSpotlight(mesh, childMeshes, color);
+                    }
                 }
                 requestRender();
             }
@@ -286,16 +294,24 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
         }); // end requestAnimationFrame
     }); // end mousemove
 
-    // Double-click on 3D node: persistent selection with hover effects
+    // Double-click: persistent selection (3D) or zoom-to-node (2D)
     window.addEventListener('dblclick', (event) => {
-        raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObjects(_raycastMeshes);
+        const activeCamera = window._activeCamera || camera;
+        const is2D = window._viewMode === '2d';
+        const activeRaycastMeshes = is2D ? Array.from(get2DNodeDataMap().keys()) : _raycastMeshes;
+        const activeDataMap = is2D ? get2DNodeDataMap() : nodeDataMap;
+
+        raycaster.setFromCamera(mouse, activeCamera);
+        const intersects = raycaster.intersectObjects(activeRaycastMeshes);
 
         if (intersects.length > 0) {
             const mesh = intersects[0].object;
-            const data = nodeDataMap.get(mesh);
+            const data = activeDataMap.get(mesh);
             if (data) {
-                // Toggle: double-click same node deselects
+                if (is2D) {
+                    zoomToNode(data.id);
+                    return;
+                }
                 if (selectedNodeId === data.id) {
                     clearSelection();
                     if (window._graphHoverCallback) window._graphHoverCallback(null);
@@ -306,12 +322,12 @@ export function setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMes
                 }
             }
         } else {
-            // Double-click empty space: clear selection
             clearSelection();
         }
     });
 
     window.addEventListener('click', (event) => {
+        if (window._viewMode === '2d') return;
         raycaster.setFromCamera(mouse, camera);
 
         const layerPlanes = Object.values(layerMeshes);

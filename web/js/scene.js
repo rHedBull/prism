@@ -63,6 +63,8 @@ export function createScene() {
 
     window.addEventListener('resize', () => {
         resizeCanvas();
+        // 2D camera resize is handled via window._resize2DCamera if set
+        if (window._resize2DCamera) window._resize2DCamera();
         requestRender();
     });
 
@@ -80,7 +82,8 @@ export function initRenderer(renderer, scene, camera, controls) {
         scheduleFrame: requestAnimationFrame,
         render: () => {
             TWEEN.update();
-            renderer.render(scene, camera);
+            const cam = window._activeCamera || camera;
+            renderer.render(scene, cam);
         },
         hasPendingWork: () => TWEEN.getAll().length > 0,
     });

@@ -9,8 +9,11 @@ import { setupInteraction } from './interaction.js';
 import { createTreePanel } from './tree-panel.js';
 import { initConfigPanel } from './config-panel.js';
 import { activateDiffMode, deactivateDiffMode, loadDiff } from './diff-overlay.js';
+import { create2DCamera, build2DScene, destroy2DScene, setup2DControls, resize2DCamera } from './mode-2d.js';
 
 const { scene, camera, renderer, controls, resizeCanvas } = createScene();
+window._viewMode = '3d';
+window._activeCamera = camera;
 
 const defaultCameraPos = new THREE.Vector3(45, 50, 45);
 const defaultTarget = new THREE.Vector3(0, 15, 0);
@@ -117,6 +120,62 @@ async function init() {
             }
             treePanel.refresh();
             requestRender();
+        });
+
+        // Create 2D camera and controls
+        const camera2d = create2DCamera();
+        setup2DControls(renderer);
+        window._resize2DCamera = resize2DCamera;
+
+        // 2D/3D mode toggle
+        const toggleBtn = document.getElementById('btn-toggle-2d');
+        toggleBtn.addEventListener('click', () => {
+            if (window._viewMode === '3d') {
+                window._viewMode = '2d';
+                toggleBtn.textContent = '3D View';
+
+                // Hide all 3D objects
+                for (const group of Object.values(layerMeshes)) group.visible = false;
+                for (const mesh of Object.values(nodeMeshes)) mesh.visible = false;
+                for (const line of edgeMeshes) line.visible = false;
+                // Hide semantic edges and icons in 2D mode
+                for (const group of semanticEdgeGroups) group.visible = false;
+                for (const sprite of iconSprites) sprite.visible = false;
+
+                // Build 2D scene
+                build2DScene(layerGroups, scene);
+                controls.enabled = false;
+                window._activeCamera = camera2d;
+
+                // Hide layer toggles in config panel
+                const layersSection = document.getElementById('layer-3')?.closest('.config-section');
+                if (layersSection) layersSection.style.display = 'none';
+
+                requestRender();
+            } else {
+                window._viewMode = '3d';
+                toggleBtn.textContent = '2D View';
+
+                // Destroy 2D scene
+                destroy2DScene(scene);
+
+                // Restore 3D objects
+                for (const group of Object.values(layerMeshes)) group.visible = true;
+                for (const [id, mesh] of Object.entries(nodeMeshes)) mesh.visible = true;
+                for (const line of edgeMeshes) line.visible = true;
+                // Restore semantic edges and icons (visibility will be synced by config panel)
+                updateSemanticEdgeVisibility(semanticEdgeGroups, nodeMeshes);
+                updateIconVisibility(iconSprites, nodeMeshes);
+
+                controls.enabled = true;
+                window._activeCamera = camera;
+
+                // Show layer toggles again
+                const layersSection = document.getElementById('layer-3')?.closest('.config-section');
+                if (layersSection) layersSection.style.display = '';
+
+                requestRender();
+            }
         });
 
         requestRender();
