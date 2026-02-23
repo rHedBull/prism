@@ -155,7 +155,7 @@ export function build2DScene(layerGroups, scene) {
 export function updateSemanticZoom() {
     if (!_camera2d || !_treemapLayout) return;
 
-    const frustumHalf = (_camera2d.right - _camera2d.left) / 2;
+    const frustumHalf = (_camera2d.top - _camera2d.bottom) / 2;
 
     for (const [nodeId, rect] of _treemapLayout) {
         const mesh = _nodeMeshes2d[nodeId];
@@ -217,24 +217,26 @@ export function setup2DControls(renderer) {
         const mx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
         const my = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-        const halfW = (_camera2d.right - _camera2d.left) / 2;
+        // halfH is the canonical frustum half-size (aspect-independent)
         const halfH = (_camera2d.top - _camera2d.bottom) / 2;
+        const halfW = halfH * aspect;
         const worldX = _camera2d.position.x + mx * halfW;
         const worldZ = _camera2d.position.z - my * halfH;
 
-        const newHalfW = halfW * zoomFactor;
+        const newHalfH = halfH * zoomFactor;
         const minZoom = 3;
         const maxZoom = _totalSize * 1.2;
-        const clampedHalf = Math.max(minZoom, Math.min(maxZoom, newHalfW));
+        const clampedH = Math.max(minZoom, Math.min(maxZoom, newHalfH));
+        const clampedW = clampedH * aspect;
 
-        _camera2d.left = -clampedHalf * aspect;
-        _camera2d.right = clampedHalf * aspect;
-        _camera2d.top = clampedHalf;
-        _camera2d.bottom = -clampedHalf;
+        _camera2d.left = -clampedW;
+        _camera2d.right = clampedW;
+        _camera2d.top = clampedH;
+        _camera2d.bottom = -clampedH;
 
         // Adjust camera position to zoom toward mouse
-        _camera2d.position.x = worldX - mx * clampedHalf;
-        _camera2d.position.z = worldZ + my * clampedHalf;
+        _camera2d.position.x = worldX - mx * clampedW;
+        _camera2d.position.z = worldZ + my * clampedH;
 
         _camera2d.updateProjectionMatrix();
         updateSemanticZoom();
