@@ -143,7 +143,7 @@ async function init() {
                 for (const sprite of iconSprites) sprite.visible = false;
 
                 // Build 2D scene
-                build2DScene(layerGroups, scene);
+                build2DScene(layerGroups, scene, graph.edges);
                 controls.enabled = false;
                 window._activeCamera = camera2d;
 
