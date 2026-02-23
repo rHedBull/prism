@@ -7,7 +7,15 @@ export async function loadGraph(basePath = '.') {
     ]);
     const nodes = await nodesRes.json();
     const edges = await edgesRes.json();
-    return { nodes, edges };
+
+    // Optional semantic enrichment
+    let semantic = null;
+    try {
+        const semRes = await fetch(`${basePath}/.callgraph/semantic.json`);
+        if (semRes.ok) semantic = await semRes.json();
+    } catch (_) { /* no semantic data available */ }
+
+    return { nodes, edges, semantic };
 }
 
 export function groupByAbstractionLevel(nodes, edges = []) {
