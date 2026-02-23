@@ -265,7 +265,7 @@ export function setup2DControls(renderer) {
         const canvasH = window.innerHeight;
 
         _camera2d.position.x = _cameraStart.x - (dx / canvasW) * frustumW;
-        _camera2d.position.z = _cameraStart.z + (dy / canvasH) * frustumH;
+        _camera2d.position.z = _cameraStart.z - (dy / canvasH) * frustumH;
         _camera2d.updateProjectionMatrix();
         requestRender();
     });
