@@ -132,6 +132,8 @@ def _resolve_level(dir_path: str, level_map: dict | None) -> int:
         ancestor = str(Path(*parts[:i]))
         if ancestor in level_map:
             ancestor_level = level_map[ancestor]
+            if ancestor_level <= 1:
+                return 1  # child of a component stays component
             if ancestor_level == 2:
                 return 1  # component inside container
             if ancestor_level == 3:

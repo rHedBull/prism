@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 *.egg-info/
 dist/
+build/
 .callgraph/
 node_modules/
 test-project/

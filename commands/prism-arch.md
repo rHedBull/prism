@@ -4,44 +4,87 @@ description: "Review and maintain the semantic C4 architecture configuration"
 
 # /prism-arch — Architecture Config Management
 
-Review, validate, and update `.callgraph/architecture.yaml` — the semantic C4 classification for this codebase.
+Automatically review and correct `.callgraph/architecture.yaml` — the semantic C4 classification for this codebase.
+
+## Steps
+
+1. **Ensure config exists.** If `.callgraph/architecture.yaml` is missing, run:
+   ```bash
+   callgraph build .
+   ```
+
+2. **Read the config** and the codebase structure:
+   ```bash
+   cat .callgraph/architecture.yaml
+   ```
+
+3. **Review every `confirmed: false` entry.** For each one, apply the decision tree top-down:
+
+   **Is it a System?** (Different product goal, different user base)
+   → Move to `systems` section, remove from `containers`.
+
+   **Is it a Container?** Apply the 2-of-6 rule — does it meet **2 or more**:
+   - Runs as its own process / service
+   - Has its own deploy pipeline
+   - Scales independently
+   - Different tech stack from siblings
+   - Separate runtime responsibility
+   - Needs its own monitoring
+
+   → If yes: set `confirmed: true`.
+   → If no: it's not a real container. Remove it from `containers` and add to `overrides` with level 1 (component).
+
+   **Quick gut check:** Would Kubernetes deploy it separately? If not, it's not a C2.
+
+4. **Check for missing containers.** Scan top-level dirs not in the config. A dir without a Dockerfile can still be a container if it meets 2-of-6.
+
+5. **Check for systems.** If the repo has multiple independent products, group their containers under `systems` entries.
+
+6. **Write the corrected config** to `.callgraph/architecture.yaml`.
+
+7. **Rebuild and verify:**
+   ```bash
+   callgraph build .
+   ```
+   Then print the directory classification summary:
+   ```bash
+   python3 -c "
+   import json
+   nodes = json.loads(open('.callgraph/nodes.json').read())
+   dirs = [n for n in nodes if n['type'] == 'directory']
+   for d in sorted(dirs, key=lambda x: x['file_path']):
+       level = d['abstraction_level']
+       label = {3: 'SYSTEM', 2: 'CONTAINER', 1: 'COMPONENT'}.get(level, f'L{level}')
+       print(f'  [{label:>9}]  {d[\"file_path\"]}')
+   "
+   ```
+
+8. **Report** what was changed and why, referencing which criteria each entry met or failed.
 
 ## Decision Tree
 
-Classify top-down. Ask in order for each directory:
+```
+Different product goal?          → System  (level 3)
+Separate deploy/runtime? (2/6)   → Container (level 2)
+Clear replaceable module?        → Component (level 1)
+Otherwise                        → Code (level 0, auto-assigned)
+```
 
-1. **Different product goal?** → System (level 3)
-2. **Separate deploy/runtime?** → Container (level 2)
-3. **Clear replaceable module?** → Component (level 1)
-4. **Otherwise** → Code (level 0, auto-assigned)
-
-## C4 Level Definitions
-
-| Level | C4 Term   | What it means | Decision heuristic |
-|-------|-----------|---------------|-------------------|
-| 3 | System | Product boundary | Different product goal, different user base |
-| 2 | Container | Deployable runtime unit | Would Kubernetes deploy it separately? |
-| 1 | Component | Replaceable module inside a container | Could you rewrite it without touching the rest? |
-| 0 | Code | Classes/functions | Auto-assigned, not configured |
-
-### Detecting a Container (C2)
+## Container 2-of-6 Criteria
 
 A directory is a container if **2 or more** of these are true:
 
-- Runs as its own process / service
-- Has its own deploy pipeline
-- Scales independently
-- Different tech stack from siblings
-- Separate runtime responsibility
-- Needs its own monitoring
+1. Runs as its own process / service
+2. Has its own deploy pipeline
+3. Scales independently
+4. Different tech stack from siblings
+5. Separate runtime responsibility
+6. Needs its own monitoring
 
 **Examples:** API backend, agent scheduler, mobile app, database, message queue, frontend SPA
-
 **Not containers:** helper modules, shared utils, internal libraries — these are components.
 
-The auto-detector looks for file signals (Dockerfile, entrypoints, package.json scripts) as a starting hint. But a container without a Dockerfile is still a container if it meets the criteria above. **Review every auto-detection against the 2-of-6 rule.**
-
-### Detecting a Component (C3)
+## Component Criteria
 
 A directory is a component if:
 
@@ -50,44 +93,7 @@ A directory is a component if:
 - Has a clear interface (imports/exports boundary)
 - Owned by one team or logical module
 
-**Examples inside a container:** planner, reward model, auth module, billing integration, API routes
-
-### Detecting a System (C1)
-
-A system = product boundary. Defined by the agent, not auto-detected.
-
-- **Monorepo with multiple products:** each product is a system
-- **Platform + supporting services:** platform is one system, monitoring/tooling is another
-- **Single product:** omit `systems` entirely (a synthetic root is created)
-
-## Steps
-
-1. **Check current config:**
-   ```bash
-   cat .callgraph/architecture.yaml 2>/dev/null || echo "No config found"
-   ```
-   If missing, run `callgraph build .` first to get auto-detected hints.
-
-2. **Start at the top — define systems** if the repo has multiple products.
-
-3. **Review each container.** For each auto-detected entry:
-   - Does it meet 2+ of the container criteria? Keep it.
-   - Is it really just a module with an entrypoint? Demote to component via overrides.
-   - Are there containers the detector missed? Add them manually.
-   - Mark reviewed entries with `confirmed: true`.
-
-4. **Review components.** Components are inferred (dirs inside containers), but check:
-   - Are there dirs that should be components but sit outside a container? Use overrides.
-   - Are there dirs inside a container that are really sub-containers? Promote them.
-
-5. **Review overrides** for any manual level assignments.
-
-6. **Write corrections** to `.callgraph/architecture.yaml`.
-
-7. **Rebuild:**
-   ```bash
-   callgraph build .
-   ```
+**Examples:** planner, reward model, auth routes, billing integration, data models
 
 ## Config Schema
 
@@ -99,14 +105,14 @@ systems:
 containers:
   - path: "platform/api-backend"
     name: "API Backend"
-    detected_by: "Dockerfile"           # auto-detection signal
-    confirmed: true                      # agent reviewed this
+    detected_by: "Dockerfile"
+    confirmed: true
   - path: "platform/mobile-app"
     name: "Mobile App"
     detected_by: null                    # manually added, no file signal
     confirmed: true
 overrides:
-  "shared-utils": 1    # force to component (C3) — it's a helper, not a service
+  "shared-utils": 1    # force to component — it's a helper, not a service
 ```
 
 ## Common Mistakes
@@ -115,10 +121,4 @@ overrides:
 - **Huge monolith with no modules** → missing C3s. Look for replaceable boundaries.
 - **Using repos to define containers** → wrong abstraction. Repo != runtime.
 - **Dockerfile = container** → not always. A Dockerfile for a build tool isn't a runtime unit.
-
-## Tips
-
-- Auto-detection runs on every `callgraph build` — new hints are merged in
-- Manual edits (systems, confirmed, manual containers) are preserved across rebuilds
-- Use `confirmed: true` to mark entries the agent has reviewed
-- Unconfirmed detections should be reviewed before trusting the architecture view
+- **entrypoint = container** → a `main.py` in a shared library doesn't make it a service.
