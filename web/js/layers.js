@@ -372,12 +372,14 @@ function createTextSprite(text, color = 0xffffff, fontSize = 28) {
     canvas.width = 512;
     canvas.height = 64;
     const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.font = `bold ${fontSize}px monospace`;
     ctx.fillStyle = `#${new THREE.Color(color).getHexString()}`;
     ctx.fillText(text, 10, 44);
 
     const texture = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    texture.premultiplyAlpha = true;
+    const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(18, 2.5, 1);
     return sprite;
