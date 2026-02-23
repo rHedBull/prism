@@ -18,13 +18,13 @@ const LAYER_LABELS = {
 const LAYER_SPACING = 12;
 export const LAYER_SIZE = 50;
 
+// Minimum cell size per node at each level
+const MIN_CELL = { 0: 4, 1: 6, 2: 12, 3: 22 };
+
 export async function createLayers(layerGroups, edges, scene, onProgress) {
     const layerMeshes = {};
     const nodeMeshes = {};
     const nodeDataMap = new Map();
-
-    // Track bounding boxes: nodeId -> { cx, cz, w, d } (center + dimensions)
-    const nodeBounds = {};
 
     // Compute metric range for color mapping
     const allNodes = Object.values(layerGroups).flat();
@@ -33,36 +33,126 @@ export async function createLayers(layerGroups, edges, scene, onProgress) {
     // Process layers top-down: C1 (3) -> C2 (2) -> C3 (1) -> C4 (0)
     const levels = [3, 2, 1, 0];
 
+    // Deferred plane data — we create planes after placing nodes so we can size them
+    const deferredPlanes = [];
+
     for (const level of levels) {
         const y = level * LAYER_SPACING;
         const nodes = layerGroups[level] || [];
         if (nodes.length === 0) continue;
 
-        // Add layer plane
-        const planeGeo = new THREE.BoxGeometry(LAYER_SIZE, 0.15, LAYER_SIZE);
+        const layerGroup = new THREE.Group();
+        layerGroup.userData = { type: 'layer', level };
+        scene.add(layerGroup);
+        layerMeshes[level] = layerGroup;
+
+        // Track node positions placed on this layer for bounding box
+        const placedPositions = [];
+
+        // Compute grid size to fit all nodes with minimum cell spacing
+        const n = nodes.length;
+        const cellSize = MIN_CELL[level] || 4;
+        const cols = Math.ceil(Math.sqrt(n));
+        const rows = Math.ceil(n / cols);
+        const gridW = Math.max(LAYER_SIZE, cols * cellSize);
+        const gridD = Math.max(LAYER_SIZE, rows * cellSize);
+        const actualCellW = gridW / cols;
+        const actualCellD = gridD / rows;
+
+        // Sort by parent group, then by LOC within each group, for spatial coherence
+        const sorted = [...nodes].sort((a, b) => {
+            const pa = a._layerParent || '';
+            const pb = b._layerParent || '';
+            if (pa !== pb) return pa.localeCompare(pb);
+            return (b.lines_of_code || 0) - (a.lines_of_code || 0);
+        });
+
+        for (let i = 0; i < sorted.length; i++) {
+            const node = sorted[i];
+            const col = i % cols;
+            const row = Math.floor(i / cols);
+            const cx = -gridW / 2 + (col + 0.5) * actualCellW;
+            const cz = -gridD / 2 + (row + 0.5) * actualCellD;
+
+            const height = computeHeight(node);
+
+            // Block size: fraction of cell, capped per level
+            const maxSize = level === 3 ? 20 : level === 2 ? 10 : level === 1 ? 4 : 2;
+            const fillRatio = level === 0 ? 0.6 : 0.5;
+            const blockW = Math.min(maxSize, Math.max(0.5, (actualCellW - 0.5) * fillRatio));
+            const blockD = Math.min(maxSize, Math.max(0.5, (actualCellD - 0.5) * fillRatio));
+
+            const geo = new THREE.BoxGeometry(blockW, height, blockD);
+            const color = computeColor(node, metricRange);
+            const mat = new THREE.MeshPhongMaterial({
+                color,
+                emissive: color,
+                emissiveIntensity: 0.15,
+                shininess: 60,
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(cx, y + height / 2 + 0.1, cz);
+            mesh.userData = { type: 'node', nodeData: node, _origColor: color };
+            scene.add(mesh);
+
+            nodeMeshes[node.id] = mesh;
+            nodeDataMap.set(mesh, node);
+
+            placedPositions.push({ x: cx, z: cz, hw: blockW / 2, hd: blockD / 2 });
+        }
+
+        // Defer plane creation — compute from placed node positions
+        deferredPlanes.push({ level, y, layerGroup, placedPositions });
+
+        // Yield to browser after each layer so the page stays responsive
+        if (onProgress) onProgress(level, nodes.length);
+        await new Promise(r => setTimeout(r, 0));
+    }
+
+    // Now create planes sized to fit their nodes
+    const PLANE_PADDING = 4;
+    for (const { level, y, layerGroup, placedPositions } of deferredPlanes) {
+        let planeW, planeD, cx, cz;
+        if (placedPositions.length === 0) {
+            planeW = LAYER_SIZE;
+            planeD = LAYER_SIZE;
+            cx = 0;
+            cz = 0;
+        } else {
+            let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+            for (const p of placedPositions) {
+                minX = Math.min(minX, p.x - p.hw);
+                maxX = Math.max(maxX, p.x + p.hw);
+                minZ = Math.min(minZ, p.z - p.hd);
+                maxZ = Math.max(maxZ, p.z + p.hd);
+            }
+            planeW = Math.max(LAYER_SIZE, (maxX - minX) + PLANE_PADDING * 2);
+            planeD = Math.max(LAYER_SIZE, (maxZ - minZ) + PLANE_PADDING * 2);
+            cx = (minX + maxX) / 2;
+            cz = (minZ + maxZ) / 2;
+        }
+
+        const planeGeo = new THREE.BoxGeometry(planeW, 0.15, planeD);
         const planeMat = new THREE.MeshPhongMaterial({
             color: LAYER_COLORS[level] || 0x666666,
             transparent: true,
             opacity: 0.15,
             depthWrite: false,
         });
-        const layerGroup = new THREE.Group();
-        layerGroup.userData = { type: 'layer', level };
-
         const plane = new THREE.Mesh(planeGeo, planeMat);
-        plane.position.y = y;
+        plane.position.set(cx, y, cz);
         plane.userData = { type: 'layer', level };
         layerGroup.add(plane);
 
         // Wireframe border
-        const borderGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(LAYER_SIZE, 0.15, LAYER_SIZE));
+        const borderGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(planeW, 0.15, planeD));
         const borderMat = new THREE.LineBasicMaterial({
             color: LAYER_COLORS[level] || 0x666666,
             transparent: true,
             opacity: 0.4,
         });
         const border = new THREE.LineSegments(borderGeo, borderMat);
-        border.position.y = y;
+        border.position.set(cx, y, cz);
         layerGroup.add(border);
 
         // Layer label
@@ -71,104 +161,11 @@ export async function createLayers(layerGroups, edges, scene, onProgress) {
             LAYER_COLORS[level] || 0x666666,
             36
         );
-        label.position.set(-LAYER_SIZE / 2 - 4, y + 1.5, 0);
+        label.position.set(cx - planeW / 2 - 4, y + 1.5, cz);
         layerGroup.add(label);
-
-        scene.add(layerGroup);
-        layerMeshes[level] = layerGroup;
-
-        // Group nodes by their _layerParent
-        const byParent = {};
-        for (const node of nodes) {
-            const pid = node._layerParent || '_root';
-            if (!byParent[pid]) byParent[pid] = [];
-            byParent[pid].push(node);
-        }
-
-        // For each parent group, subdivide the parent's bounding box
-        for (const [parentId, children] of Object.entries(byParent)) {
-            let parentBox;
-            if (parentId === '_root' || !nodeBounds[parentId]) {
-                // Top level: use full layer
-                const half = LAYER_SIZE / 2 - 2;
-                parentBox = { cx: 0, cz: 0, w: half * 2, d: half * 2 };
-            } else {
-                parentBox = nodeBounds[parentId];
-            }
-
-            // Subdivide parent box into a grid for children
-            const positions = subdivideBox(parentBox, children);
-
-            for (const { node, box } of positions) {
-                // Store this node's bounding box for the next layer down
-                nodeBounds[node.id] = box;
-
-                const height = computeHeight(node);
-
-                // Block size: smaller fraction of allocated box, capped per level
-                const maxSize = level === 3 ? 20 : level === 2 ? 10 : level === 1 ? 4 : 2;
-                const fillRatio = level === 0 ? 0.6 : 0.5;
-                const blockW = Math.min(maxSize, Math.max(0.5, box.w * fillRatio));
-                const blockD = Math.min(maxSize, Math.max(0.5, box.d * fillRatio));
-
-                const geo = new THREE.BoxGeometry(blockW, height, blockD);
-                const color = computeColor(node, metricRange);
-                const mat = new THREE.MeshPhongMaterial({
-                    color,
-                    emissive: color,
-                    emissiveIntensity: 0.15,
-                    shininess: 60,
-                });
-                const mesh = new THREE.Mesh(geo, mat);
-                mesh.position.set(box.cx, y + height / 2 + 0.1, box.cz);
-                mesh.userData = { type: 'node', nodeData: node, _origColor: color };
-                scene.add(mesh);
-
-                nodeMeshes[node.id] = mesh;
-                nodeDataMap.set(mesh, node);
-            }
-        }
-
-        // Yield to browser after each layer so the page stays responsive
-        if (onProgress) onProgress(level, nodes.length);
-        await new Promise(r => setTimeout(r, 0));
     }
 
     return { layerMeshes, nodeMeshes, nodeDataMap };
-}
-
-// Subdivide a bounding box into cells for N children, return { node, box } pairs
-function subdivideBox(parentBox, children) {
-    const n = children.length;
-    if (n === 0) return [];
-
-    const cols = Math.ceil(Math.sqrt(n));
-    const rows = Math.ceil(n / cols);
-    const padding = 0.3;
-
-    const cellW = parentBox.w / cols;
-    const cellD = parentBox.d / rows;
-    const startX = parentBox.cx - parentBox.w / 2;
-    const startZ = parentBox.cz - parentBox.d / 2;
-
-    // Sort children by LOC descending so bigger blocks get placed first
-    const sorted = [...children].sort((a, b) => (b.lines_of_code || 0) - (a.lines_of_code || 0));
-
-    return sorted.map((node, i) => {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const cx = startX + (col + 0.5) * cellW;
-        const cz = startZ + (row + 0.5) * cellD;
-        return {
-            node,
-            box: {
-                cx,
-                cz,
-                w: cellW - padding,
-                d: cellD - padding,
-            },
-        };
-    });
 }
 
 function createTextSprite(text, color = 0xffffff, fontSize = 28) {
