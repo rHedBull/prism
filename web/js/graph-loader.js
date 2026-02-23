@@ -43,7 +43,7 @@ export function groupByAbstractionLevel(nodes, edges = []) {
         layers[3].push({
             id: 'system:root',
             type: 'system',
-            name: _inferProjectName(fileNodes),
+            name: _inferProjectName(nodes),
             file_path: '.',
             language: null,
             lines_of_code: totalLoc,
@@ -83,18 +83,28 @@ export function groupByAbstractionLevel(nodes, edges = []) {
         });
     }
 
-    // C3 (level 1): components — leaf dirs with abstraction_level === 1
+    // C3 (level 1): components — ALL dirs with abstraction_level === 1
+    // Include non-leaf dirs too so the tree shows full nesting.
     const c1Dirs = useDepthFallback
         ? _getLeafDirs(dirNodes)
-        : _getLeafAmong(dirNodes.filter(d => d.abstraction_level === 1));
+        : dirNodes.filter(d => d.abstraction_level === 1);
     layers[1] = [];
+    // Build a set of level-1 dir IDs for parent lookup
+    const c1DirIds = new Set(c1Dirs.map(d => d.id));
     for (const dir of c1Dirs) {
         const children = fileNodes.filter(f => f.parent === dir.id);
         if (children.length === 0) continue;
         const cLoc = children.reduce((sum, f) => sum + (f.lines_of_code || 0), 0);
         const cExports = children.reduce((sum, f) => sum + (f.export_count || 0), 0);
         const languages = [...new Set(children.map(f => f.language).filter(Boolean))];
-        const parentContainer = _findContainerAncestor(dir, layers[2], dirNodes);
+        // First try to find a level-1 ancestor (nested component), then container
+        const parentComponent = _findComponentAncestor(dir, c1DirIds, dirNodes);
+        const parentContainer = parentComponent
+            ? null
+            : _findContainerAncestor(dir, layers[2], dirNodes);
+        const layerParent = parentComponent
+            || (parentContainer ? parentContainer.id : null)
+            || (layers[3][0] ? layers[3][0].id : null);
         layers[1].push({
             id: dir.id,
             type: 'component',
@@ -104,7 +114,7 @@ export function groupByAbstractionLevel(nodes, edges = []) {
             lines_of_code: cLoc,
             export_count: cExports,
             abstraction_level: 1,
-            _layerParent: parentContainer ? parentContainer.id : (layers[3][0] ? layers[3][0].id : null),
+            _layerParent: layerParent,
             _childFileIds: new Set(children.map(f => f.id)),
         });
     }
@@ -117,10 +127,22 @@ export function groupByAbstractionLevel(nodes, edges = []) {
             componentLookup.set(fid, comp.id);
         }
     }
+    // Also map file -> container for root-level files not under any component
+    const containerLookup = new Map();
+    for (const c of layers[2]) {
+        for (const f of fileNodes) {
+            if (f.file_path.startsWith(c.file_path + '/') && !componentLookup.has(f.id)) {
+                containerLookup.set(f.id, c.id);
+            }
+        }
+    }
+    const fallbackParent = layers[3][0] ? layers[3][0].id : null;
     for (const node of nodes) {
         if (node.type === 'function' || node.type === 'class' || node.type === 'interface' || node.type === 'type_alias') {
-            // parent is file:path, map file -> component
-            const parentComponent = componentLookup.get(node.parent);
+            // parent is file:path, map file -> component -> container -> system
+            const parentComponent = componentLookup.get(node.parent)
+                || containerLookup.get(node.parent)
+                || fallbackParent;
             layers[0].push({
                 ...node,
                 _layerParent: parentComponent || null,
@@ -146,11 +168,19 @@ function _getLeafDirs(dirNodes) {
     return dirNodes.filter(d => !hasChildDir.has(d.id));
 }
 
-function _inferProjectName(fileNodes) {
-    if (fileNodes.length === 0) return 'system';
-    const first = fileNodes[0].file_path;
-    const root = first.split('/')[0];
-    return root || 'system';
+function _inferProjectName(nodes) {
+    if (nodes.length === 0) return 'system';
+    // Count all nodes (files + functions) per top-level directory, skip test/build
+    const skip = new Set(['tests', 'test', 'build', 'dist', 'docs', 'node_modules']);
+    const topDirs = {};
+    for (const n of nodes) {
+        const parts = (n.file_path || '').split('/');
+        if (parts.length > 1 && !skip.has(parts[0])) {
+            topDirs[parts[0]] = (topDirs[parts[0]] || 0) + 1;
+        }
+    }
+    const sorted = Object.entries(topDirs).sort((a, b) => b[1] - a[1]);
+    return sorted.length > 0 ? sorted[0][0] : 'system';
 }
 
 function _getAllFilesUnder(dir, fileNodes) {
@@ -186,6 +216,19 @@ function _findSystemAncestor(dir, systems, allDirs) {
     // Fallback: match by path prefix
     const sorted = [...systems].sort((a, b) => b.file_path.length - a.file_path.length);
     return sorted.find(s => dir.file_path.startsWith(s.file_path + '/')) || systems[0] || null;
+}
+
+function _findComponentAncestor(dir, componentDirIds, allDirs) {
+    // Walk up parent chain to find nearest level-1 component ancestor
+    const dirById = new Map(allDirs.map(d => [d.id, d]));
+    let current = dir;
+    while (current && current.parent) {
+        if (componentDirIds.has(current.parent)) {
+            return current.parent;
+        }
+        current = dirById.get(current.parent);
+    }
+    return null;
 }
 
 function _findContainerAncestor(dir, containers, allDirs) {
