@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createScene, initRenderer, animateCamera, requestRender, panelState } from './scene.js';
-import { loadGraph, groupByAbstractionLevel } from './graph-loader.js';
+import { loadGraph, groupByAbstractionLevel, filterTestNodes } from './graph-loader.js';
 import { createLayers, LAYER_SIZE } from './layers.js';
 import { createEdges } from './edges.js';
 import { createSemanticEdges, updateSemanticEdgeVisibility } from './semantic-edges.js';
@@ -68,8 +68,13 @@ async function init() {
     try {
         const graph = await loadGraph('.');
         const layerGroups = groupByAbstractionLevel(graph.nodes, graph.edges);
-        const { layerMeshes, nodeMeshes, nodeDataMap } = await createLayers(layerGroups, graph.edges, scene);
-        const edgeMeshes = createEdges(graph.edges, nodeMeshes, scene, graph.nodes);
+
+        // Apply test-node filter based on checkbox state
+        const hideTestsCb = document.getElementById('hide-tests');
+        let filteredGroups = filterTestNodes(layerGroups, hideTestsCb.checked);
+
+        let { layerMeshes, nodeMeshes, nodeDataMap } = await createLayers(filteredGroups, graph.edges, scene);
+        let edgeMeshes = createEdges(graph.edges, nodeMeshes, scene, graph.nodes);
 
         // Semantic edges and node icons (from optional semantic.json)
         let semanticEdgeGroups = [];
@@ -87,7 +92,7 @@ async function init() {
 
         setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMeshes, layerMeshes, controls, animateCamera, defaultCameraPos, defaultTarget, LAYER_SIZE, parentMap);
 
-        const treePanel = createTreePanel(graph, layerGroups, nodeMeshes, camera, controls, animateCamera);
+        let treePanel = createTreePanel(graph, filteredGroups, nodeMeshes, camera, controls, animateCamera);
 
         // Wire up graph hover -> tree selection sync
         window._graphHoverCallback = (nodeId) => {
@@ -96,7 +101,7 @@ async function init() {
         };
 
         // Init config panel with mesh references
-        initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap, semanticEdgeGroups, iconSprites);
+        initConfigPanel(graph, filteredGroups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap, semanticEdgeGroups, iconSprites);
 
         // Check for diff.json and set up toggle
         const diff = await loadDiff('.');
@@ -127,6 +132,53 @@ async function init() {
         setup2DControls(renderer);
         window._resize2DCamera = resize2DCamera;
 
+        // Rebuild the current scene (3D or 2D) with the given filtered groups
+        async function rebuildScene(groups) {
+            if (window._viewMode === '2d') {
+                destroy2DScene(scene);
+                build2DScene(groups, scene, graph.edges);
+                requestRender();
+            } else {
+                // Remove old 3D meshes from scene
+                for (const group of Object.values(layerMeshes)) scene.remove(group);
+                for (const mesh of Object.values(nodeMeshes)) scene.remove(mesh);
+                for (const line of edgeMeshes) scene.remove(line);
+                for (const group of semanticEdgeGroups) scene.remove(group);
+                for (const sprite of iconSprites) scene.remove(sprite);
+
+                // Rebuild 3D layers
+                const result = await createLayers(groups, graph.edges, scene);
+                layerMeshes = result.layerMeshes;
+                nodeMeshes = result.nodeMeshes;
+                nodeDataMap = result.nodeDataMap;
+                edgeMeshes = createEdges(graph.edges, nodeMeshes, scene, graph.nodes);
+
+                semanticEdgeGroups = [];
+                iconSprites = [];
+                if (graph.semantic) {
+                    semanticEdgeGroups = createSemanticEdges(graph.semantic, nodeMeshes, scene);
+                    iconSprites = createNodeIcons(graph.semantic, nodeMeshes, scene);
+                }
+
+                setupInteraction(camera, scene, nodeDataMap, edgeMeshes, nodeMeshes, layerMeshes, controls, animateCamera, defaultCameraPos, defaultTarget, LAYER_SIZE, parentMap);
+                initConfigPanel(graph, groups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap, semanticEdgeGroups, iconSprites);
+
+                if (diff && diffShown) {
+                    activateDiffMode(diff, nodeMeshes, edgeMeshes, scene);
+                }
+
+                requestRender();
+            }
+            // Rebuild tree panel
+            treePanel = createTreePanel(graph, groups, nodeMeshes, camera, controls, animateCamera);
+        }
+
+        // Wire up "Hide Test Nodes" toggle
+        hideTestsCb.addEventListener('change', () => {
+            filteredGroups = filterTestNodes(layerGroups, hideTestsCb.checked);
+            rebuildScene(filteredGroups);
+        });
+
         // 2D/3D mode toggle
         const toggleBtn = document.getElementById('btn-toggle-2d');
         toggleBtn.addEventListener('click', () => {
@@ -143,7 +195,7 @@ async function init() {
                 for (const sprite of iconSprites) sprite.visible = false;
 
                 // Build 2D scene
-                build2DScene(layerGroups, scene, graph.edges);
+                build2DScene(filteredGroups, scene, graph.edges);
                 controls.enabled = false;
                 window._activeCamera = camera2d;
 

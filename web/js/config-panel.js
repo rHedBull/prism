@@ -7,7 +7,13 @@ import { setSizeMetric, setColorMetric, getColorMetric, computeHeight, computeCo
 import { updateSemanticEdgeVisibility } from './semantic-edges.js';
 import { updateIconVisibility } from './node-icons.js';
 
+let _configAbort = null;
+
 export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, layerMeshes, nodeDataMap, semanticEdgeGroups = [], iconSprites = []) {
+    // Abort previous listeners to prevent stacking on rebuild
+    if (_configAbort) _configAbort.abort();
+    _configAbort = new AbortController();
+    const signal = _configAbort.signal;
     // Auto-populate languages from graph data
     const languages = new Set();
     for (const node of graph.nodes) {
@@ -15,6 +21,10 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
     }
 
     const section = document.getElementById('config-languages-section');
+    // Clear previously-generated language checkboxes (keep the title)
+    const title = section.querySelector('.config-section-title');
+    while (section.firstChild) section.removeChild(section.firstChild);
+    if (title) section.appendChild(title);
     for (const lang of [...languages].sort()) {
         const id = `lang-${lang}`;
         const item = document.createElement('div');
@@ -62,7 +72,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
             }
             updateEdgeVisibility();
             reapplyMetrics();
-        });
+        }, { signal });
     }
 
     // Node type toggles
@@ -76,7 +86,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
             }
             updateEdgeVisibility();
             reapplyMetrics();
-        });
+        }, { signal });
     }
 
     // Edge type toggles
@@ -86,7 +96,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
         checkbox.addEventListener('change', () => {
             updateEdgeVisibility();
             requestRender('config');
-        });
+        }, { signal });
     }
 
     // Language toggles
@@ -100,7 +110,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
             }
             updateEdgeVisibility();
             reapplyMetrics();
-        });
+        }, { signal });
     }
 
     // Role toggles
@@ -114,7 +124,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
             }
             updateEdgeVisibility();
             reapplyMetrics();
-        });
+        }, { signal });
     }
 
     // Metric dropdowns — recompute sizes and colors relative to visible blocks
@@ -174,7 +184,7 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
         sizeSelect.addEventListener('change', () => {
             setSizeMetric(sizeSelect.value);
             reapplyMetrics();
-        });
+        }, { signal });
     }
 
     const colorSelect = document.getElementById('metric-color');
@@ -182,6 +192,6 @@ export function initConfigPanel(graph, layerGroups, nodeMeshes, edgeMeshes, laye
         colorSelect.addEventListener('change', () => {
             setColorMetric(colorSelect.value);
             reapplyMetrics();
-        });
+        }, { signal });
     }
 }

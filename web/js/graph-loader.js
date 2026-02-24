@@ -151,9 +151,11 @@ export function groupByAbstractionLevel(nodes, edges = []) {
             const parentComponent = componentLookup.get(node.parent)
                 || containerLookup.get(node.parent)
                 || fallbackParent;
+            const isTest = /^tests?\/|\/tests?\//.test(node.file_path || '') || (node.name || '').startsWith('test_');
             layers[0].push({
                 ...node,
                 _layerParent: parentComponent || null,
+                _isTest: !!isTest,
             });
         }
     }
@@ -253,4 +255,24 @@ function _findContainerAncestor(dir, containers, allDirs) {
     // Fallback: match by path prefix
     const sorted = [...containers].sort((a, b) => b.file_path.length - a.file_path.length);
     return sorted.find(c => dir.file_path.startsWith(c.file_path + '/')) || null;
+}
+
+/**
+ * Filter out test nodes from layerGroups, removing empty containers.
+ * Returns a new layerGroups object (does not mutate original).
+ */
+export function filterTestNodes(layerGroups, hideTests) {
+    if (!hideTests) return layerGroups;
+    const filtered = {};
+    // Remove test C4 nodes
+    filtered[0] = layerGroups[0].filter(n => !n._isTest);
+    // Remove C3 components that become empty after filtering
+    const keptC3Ids = new Set(filtered[0].map(n => n._layerParent));
+    filtered[1] = layerGroups[1].filter(n => keptC3Ids.has(n.id));
+    // Remove C2 containers that have no remaining C3 children
+    const keptC2Ids = new Set(filtered[1].map(n => n._layerParent));
+    filtered[2] = layerGroups[2].filter(n => keptC2Ids.has(n.id));
+    // Always keep C1 systems
+    filtered[3] = [...layerGroups[3]];
+    return filtered;
 }
