@@ -6,9 +6,9 @@
 import { computeHeight } from './metrics.js';
 
 const CARD_GAP = 1.5;
-const ROW_GAP = 2.0;
-const CONTAINER_PADDING = 2.0;
-const LABEL_RESERVE = 2.5;
+const ROW_GAP = 2.5;
+const CONTAINER_PADDING = 3.0;
+const LABEL_RESERVE = 3.5;
 
 /**
  * Grid-pack items into rows within a target width.
@@ -18,8 +18,8 @@ const LABEL_RESERVE = 2.5;
 function gridPack(items, targetWidth, gap = CARD_GAP, rowGap = ROW_GAP) {
     if (items.length === 0) return [];
 
-    // Sort by depth descending for better row packing
-    const sorted = [...items].sort((a, b) => b.d - a.d);
+    // Sort alphabetically by name for spatial predictability
+    const sorted = [...items].sort((a, b) => a.id.localeCompare(b.id));
 
     const placed = [];
     let curX = 0;

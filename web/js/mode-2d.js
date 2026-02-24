@@ -29,6 +29,15 @@ const ZOOM_THRESHOLDS = {
 
 const FADE_RANGE = 5;
 const CORNER_RADIUS = 0.6;
+const C4_PROGRESSIVE_SPREAD = 8;
+
+// Pastel background colors per layer level (used when container is in leaf mode)
+const LAYER_PASTELS = {
+    3: 0xF8D7DA, // soft red for C1
+    2: 0xD4EDDA, // soft green for C2
+    1: 0xE8DAEF, // soft purple for C3
+    0: 0xD6EAF8, // soft blue for C4
+};
 
 let _camera2d = null;
 let _meshGroup = null;
@@ -167,17 +176,20 @@ export function build2DScene(layerGroups, scene, edges) {
         outlineGeo.dispose();
 
         // Label sprite
-        const isLeafLevel = !layerGroups[level - 1] || (layerGroups[level - 1] || []).every(n => n._layerParent !== nodeId);
-        const label = _createLabel(node.name, LAYER_COLORS[level] || 0x666666);
-        if (isLeafLevel) {
+        const childNodes = (layerGroups[level - 1] || []).filter(n => n._layerParent === nodeId);
+        const isContainer = childNodes.length > 0;
+        const labelText = isContainer ? `${node.name} (${childNodes.length})` : node.name;
+        const isLargeLabel = level >= 1;
+        const label = _createLabel(labelText, LAYER_COLORS[level] || 0x666666, { large: isLargeLabel });
+        if (!isContainer) {
             // Center label for leaf nodes
             label.position.set(rect.x + rect.w / 2, level * 0.01 + 0.02, rect.z + rect.d / 2);
         } else {
             // Top label for containers
-            label.position.set(rect.x + rect.w / 2, level * 0.01 + 0.02, rect.z + 0.8);
+            label.position.set(rect.x + rect.w / 2, level * 0.01 + 0.02, rect.z + 1.2);
         }
-        const labelScale = Math.min(rect.w * 0.8, 8);
-        label.scale.set(labelScale, labelScale * 0.15, 1);
+        const labelScale = isContainer ? Math.min(rect.w * 0.9, 12) : Math.min(rect.w * 0.8, 8);
+        label.scale.set(labelScale, labelScale * (isLargeLabel ? 0.22 : 0.15), 1);
         _meshGroup.add(label);
         _labelSprites[nodeId] = label;
     }
@@ -286,6 +298,20 @@ export function updateSemanticZoom() {
     if (!_camera2d || !_treemapLayout) return;
 
     const frustumHalf = (_camera2d.top - _camera2d.bottom) / 2;
+    const camX = _camera2d.position.x;
+    const camZ = _camera2d.position.z;
+
+    // Compute max distance for progressive C4 reveal normalization
+    let maxDist = 1;
+    if (frustumHalf <= ZOOM_THRESHOLDS[0] + C4_PROGRESSIVE_SPREAD) {
+        for (const [, rect] of _treemapLayout) {
+            if (rect.level !== 0) continue;
+            const dx = (rect.x + rect.w / 2) - camX;
+            const dz = (rect.z + rect.d / 2) - camZ;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist > maxDist) maxDist = dist;
+        }
+    }
 
     for (const [nodeId, rect] of _treemapLayout) {
         const mesh = _nodeMeshes2d[nodeId];
@@ -294,7 +320,17 @@ export function updateSemanticZoom() {
         if (!mesh) continue;
 
         const level = rect.level;
-        const threshold = ZOOM_THRESHOLDS[level];
+        let threshold = ZOOM_THRESHOLDS[level];
+
+        // Progressive C4 reveal: nodes closer to camera center appear first
+        if (level === 0) {
+            const dx = (rect.x + rect.w / 2) - camX;
+            const dz = (rect.z + rect.d / 2) - camZ;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            const normalizedDist = dist / maxDist;
+            threshold = ZOOM_THRESHOLDS[0] + (1 - normalizedDist) * C4_PROGRESSIVE_SPREAD;
+        }
+
         const visible = frustumHalf <= threshold;
 
         const deeperLevel = level - 1;
@@ -311,21 +347,34 @@ export function updateSemanticZoom() {
         mesh.visible = true;
 
         if (deeperVisible) {
-            // Container mode — show as outline only
+            // Container mode — restore original color, show as outline only
+            if (mesh.userData._origColor !== undefined) {
+                mesh.material.color.setHex(mesh.userData._origColor);
+            }
             mesh.material.opacity = 0.08;
             if (outline) { outline.visible = true; outline.material.opacity = 0.5; }
             if (label) { label.visible = true; label.material.opacity = 0.7; }
         } else {
-            // Leaf at current zoom — show filled
+            // Leaf at current zoom — show as pastel-colored block with label
             const fadeStart = threshold;
             const fadeEnd = threshold - FADE_RANGE;
             let opacity = 1.0;
             if (frustumHalf > fadeEnd && frustumHalf <= fadeStart) {
                 opacity = 1.0 - (frustumHalf - fadeEnd) / FADE_RANGE;
             }
-            mesh.material.opacity = Math.max(0.3, opacity);
-            if (outline) { outline.visible = true; outline.material.opacity = 0.8; }
-            if (label) { label.visible = true; label.material.opacity = opacity; }
+
+            if (level >= 1) {
+                // Container in leaf mode: pastel fill, visible label
+                mesh.material.color.setHex(LAYER_PASTELS[level] || 0xEEEEEE);
+                mesh.material.opacity = 0.25 * opacity + 0.05;
+                if (outline) { outline.visible = true; outline.material.opacity = 0.6; }
+                if (label) { label.visible = true; label.material.opacity = Math.max(0.5, opacity); }
+            } else {
+                // C4 leaf node: normal filled card
+                mesh.material.opacity = Math.max(0.3, opacity);
+                if (outline) { outline.visible = true; outline.material.opacity = 0.8; }
+                if (label) { label.visible = true; label.material.opacity = opacity; }
+            }
         }
     }
 
@@ -499,15 +548,17 @@ export function resize2DCamera() {
     _camera2d.updateProjectionMatrix();
 }
 
-function _createLabel(text, color) {
+function _createLabel(text, color, { large = false } = {}) {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
-    canvas.height = 64;
+    canvas.height = large ? 96 : 64;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = 'bold 28px monospace';
+    const fontSize = large ? 48 : 28;
+    ctx.font = `bold ${fontSize}px monospace`;
     ctx.fillStyle = `#${new THREE.Color(color).getHexString()}`;
-    ctx.fillText(text, 10, 44);
+    ctx.textAlign = large ? 'center' : 'left';
+    ctx.fillText(text, large ? canvas.width / 2 : 10, large ? 64 : 44);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.premultiplyAlpha = true;
