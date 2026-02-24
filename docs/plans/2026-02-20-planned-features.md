@@ -331,6 +331,8 @@ Custom and automatic node grouping beyond the directory hierarchy.
 | ~~P1~~ | ~~Diff Between Commits~~ | ~~High~~ | ~~Done~~ — `callgraph diff`, `/prism-diff`, `/prism-impact` |
 | ~~P1~~ | ~~Metric-Driven Block Size & Color~~ | ~~Medium~~ | ~~Done~~ — complexity-aware sizing, color by any metric, relative to visible blocks |
 | ~~P1~~ | ~~Additional Metrics~~ | ~~Medium~~ | ~~Done~~ — cyclomatic complexity, param count, nesting depth, instability, coupling, node type, None option |
+| ~~P1~~ | ~~Semantic Edges & Icons~~ | ~~Medium~~ | ~~Done~~ — Claude-generated inter-component labels, category icons, circuit-style C3/C2 arrows, `/prism-rebuild` enrichment |
+| ~~P1~~ | ~~2D View~~ | ~~Medium~~ | ~~Done~~ — grid-packed layout, semantic zoom, labeled containers, hide test nodes toggle |
 | P2 | User / API Journeys | High | Route detection, call chain tracing |
 | ~~P2~~ | ~~Data vs Control Separation~~ | ~~Medium~~ | ~~Done~~ — node/edge role classification, role-based coloring, role filter checkboxes |
 | P2 | Data Streams | High | Type flow analysis |
