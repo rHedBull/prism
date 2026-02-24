@@ -188,8 +188,8 @@ export function build2DScene(layerGroups, scene, edges) {
             // Top label for containers
             label.position.set(rect.x + rect.w / 2, level * 0.01 + 0.02, rect.z + 1.2);
         }
-        const labelScale = isContainer ? Math.min(rect.w * 0.9, 12) : Math.min(rect.w * 0.8, 8);
-        label.scale.set(labelScale, labelScale * (isLargeLabel ? 0.22 : 0.15), 1);
+        const labelScale = isContainer ? Math.min(rect.w * 0.9, 12) : Math.min(rect.w * 0.7, 6);
+        label.scale.set(labelScale, labelScale * (isLargeLabel ? 0.22 : 0.12), 1);
         _meshGroup.add(label);
         _labelSprites[nodeId] = label;
     }
@@ -554,11 +554,14 @@ function _createLabel(text, color, { large = false } = {}) {
     canvas.height = large ? 96 : 64;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const fontSize = large ? 48 : 28;
+    const fontSize = large ? 48 : 20;
     ctx.font = `bold ${fontSize}px monospace`;
     ctx.fillStyle = `#${new THREE.Color(color).getHexString()}`;
-    ctx.textAlign = large ? 'center' : 'left';
-    ctx.fillText(text, large ? canvas.width / 2 : 10, large ? 64 : 44);
+    ctx.textAlign = 'center';
+    // Truncate text to fit canvas
+    const maxChars = Math.floor((canvas.width - 20) / (fontSize * 0.6));
+    const displayText = text.length > maxChars ? text.slice(0, maxChars - 1) + '\u2026' : text;
+    ctx.fillText(displayText, canvas.width / 2, large ? 64 : 40);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.premultiplyAlpha = true;

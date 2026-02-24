@@ -87,12 +87,11 @@ export function buildNestedTreemap(layerGroups, totalW, totalD) {
     // containerSize[id] = { w, d } — the natural size of this node's card/container
     const containerSize = {};
 
-    // Level 0 (C4): leaf cards sized by name + metric height
+    // Level 0 (C4): uniform leaf cards for clean grid layout
+    const LEAF_W = 8;
+    const LEAF_D = 4;
     for (const node of (layerGroups[0] || [])) {
-        const w = Math.min(14, Math.max(4, node.name.length * 0.6));
-        const metricH = computeHeight(node);
-        const d = Math.min(8, Math.max(2, metricH * 1.5));
-        containerSize[node.id] = { w, d };
+        containerSize[node.id] = { w: LEAF_W, d: LEAF_D };
     }
 
     // Levels 1, 2, 3: containers that grid-pack their children
